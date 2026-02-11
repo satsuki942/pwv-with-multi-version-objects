@@ -12,7 +12,7 @@ import time
 from abc import abstractmethod
 from enum import Enum
 
-from identity_dictionary import IdentityDictionary__1__
+from identity_dictionary import IdentityDictionary
 from vector import Vector, vector_with
 
 class _Plan(Vector):
@@ -337,7 +337,7 @@ class _Strength:
 
 
 def _create_strength_table():
-    strength_table = IdentityDictionary__1__()
+    strength_table = IdentityDictionary()
     strength_table.at_put(_ABSOLUTE_STRONGEST, -10000)
     strength_table.at_put(_REQUIRED, -800)
     strength_table.at_put(_STRONG_PREFERRED, -600)
@@ -350,7 +350,7 @@ def _create_strength_table():
 
 
 def _create_strength_constants():
-    strength_constant = IdentityDictionary__1__()
+    strength_constant = IdentityDictionary()
     _strength_table.get_keys().for_each(
         lambda key: strength_constant.at_put(key, _Strength(key))
     )

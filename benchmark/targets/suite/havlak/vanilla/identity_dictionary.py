@@ -1,11 +1,11 @@
 from dictionary import Entry, Dictionary
 
 
-class _IdEntry__1__(Entry):
+class _IdEntry(Entry):
     def match(self, hash_, key):
         return self.hash == hash_ and self.key is key
 
 
-class IdentityDictionary__1__(Dictionary):
+class IdentityDictionary(Dictionary):
     def _new_entry(self, key, value, hash_):
-        return _IdEntry__1__(hash_, key, value, None)
+        return _IdEntry(hash_, key, value, None)

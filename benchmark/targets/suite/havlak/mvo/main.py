@@ -20,8 +20,8 @@ from enum import Enum
 
 import sys
 
-from identity_dictionary import IdentityDictionary__1__
-from identity_set import IdentitySet__1__
+from identity_dictionary import IdentityDictionary
+from identity_set import IdentitySet
 from set import Set
 from vector import Vector
 
@@ -129,8 +129,8 @@ class _SimpleLoop__1__:
         self.nesting_level = 0
         self._depth_level = 0
         self._counter = 0
-        self._basic_blocks = IdentitySet__1__()
-        self.children = IdentitySet__1__()
+        self._basic_blocks = IdentitySet()
+        self.children = IdentitySet()
 
         if bb is not None:
             self._basic_blocks.add(bb)
@@ -285,7 +285,7 @@ class _HavlakLoopFinder:
         self._lsg = lsg
         self._non_back_preds = Vector()
         self._back_preds = Vector()
-        self._number = IdentityDictionary__1__()
+        self._number = IdentityDictionary()
         self._max_size = 0
         self._header = None
         self._type = None

@@ -291,7 +291,7 @@ class _Packet__1__(_RBObject):
 
 
 # @classmethod を使っているので通常クラス
-class _TaskState(_RBObject):
+class _TaskState__1__(_RBObject):
     def __init__(self):
         self._task_holding = False
         self._task_waiting = False

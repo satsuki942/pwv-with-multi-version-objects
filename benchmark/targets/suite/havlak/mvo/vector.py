@@ -31,7 +31,7 @@ def vector_with(elem):
 # Porting notes:
 #  - does not use an explicit array bounds check, because Java already does
 #    that. Don't see a point in doing it twice.
-class Vector__1__:
+class Vector:
     def __init__(self, size=0):
         self._storage = None if size == 0 else [None] * size
         self._first_idx = 0
