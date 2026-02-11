@@ -1,15 +1,13 @@
 import time
 TIMES = {LOOP_COUNT}
-class MVO:
-    def __init__(self):
-        self.value = 0
-    
+class MVO__1__:
     def method1(self):
-        self.value += 1
+        return
 
-    def method2(self):
-        self.value += 1
-
+class MVO__2__:
+    def method1(self):
+        return
+    
 def main():
     obj = MVO()
     start_time = time.perf_counter()
