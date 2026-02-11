@@ -49,9 +49,7 @@ def prepare_target(target_name: str, result_dir: Path, config: BenchmarkConfig, 
         vanilla_run_path.mkdir(parents=True)
         
         # 1. Transpile & Copy
-        log(f"  Transpile: {mvo_source_path} -> {transpiled_run_path}")
         compile(mvo_source_path, transpiled_run_path)
-        log(f"  Copy: {vanilla_source_path} -> {vanilla_run_path}")
         shutil.copytree(vanilla_source_path, vanilla_run_path, dirs_exist_ok=True)
         
         # 2. Generate Scripts from templates
@@ -69,7 +67,6 @@ def prepare_target(target_name: str, result_dir: Path, config: BenchmarkConfig, 
     else:
         mvo_source_path = target_path
         transpiled_run_path = result_dir
-        log(f"  Transpile: {mvo_source_path} -> {transpiled_run_path}")
         compile(mvo_source_path, transpiled_run_path, version_selection_strategy=compile_strategy)
         _generate_script_from_template(
             transpiled_run_path / "main.py", 

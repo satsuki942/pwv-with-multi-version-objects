@@ -279,12 +279,15 @@ def _report_to_perf_overhead_bar_graph(results: list[Dict], csv_path: Path):
 def _report_to_cli(results: list[Dict], mode: str):
     """ベンチマーク結果をCLIに表示する。"""
     print("\n\n--- Benchmark Summary ---")
-    for result in results:
+    for i, result in enumerate(results):
         name = result['name']
         t_time = float(result['transpiled_time'])
         v_time = float(result['vanilla_time'])
-        
-        print(f"\nTarget: {name}")
+
+        if i > 0 and mode == 'suite':
+            print("")
+
+        print(f"Target: {name}")
         print(f"  Transpiled MVO:   {t_time:.6f} seconds")
         print(f"  Vanilla Python:   {v_time:.6f} seconds")
 

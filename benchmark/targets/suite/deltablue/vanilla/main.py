@@ -1,7 +1,6 @@
 # broken
 import time
 
-TIMES = {LOOP_COUNT}
 
 # This benchmark is derived from Mario Wolczko's Java and Smalltalk version of
 # DeltaBlue.
@@ -790,13 +789,12 @@ class _Variable:
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        inner_iterations = 100
-        _Planner.chain_test(inner_iterations)
-        _Planner.projection_test(inner_iterations)
-    
+    inner_iterations = 100
+    _Planner.chain_test(inner_iterations)
+    _Planner.projection_test(inner_iterations)
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 
 # Copyright (c) 2001-2021 Stefan Marr
 #
@@ -777,23 +776,22 @@ class _Simulator:
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        num_aircraft = 100
-        num_frames = 200
+    num_aircraft = 100
+    num_frames = 200
 
-        simulator = _Simulator(num_aircraft)
-        detector = _CollisionDetector()
+    simulator = _Simulator(num_aircraft)
+    detector = _CollisionDetector()
 
-        actual_collisions = 0
+    actual_collisions = 0
 
-        for i in range(num_frames):
-            r_time = i / 10.0
-            collisions = detector.handle_new_frame(simulator.simulate(r_time))
-            actual_collisions += collisions.size()
+    for i in range(num_frames):
+        r_time = i / 10.0
+        collisions = detector.handle_new_frame(simulator.simulate(r_time))
+        actual_collisions += collisions.size()
 
-    
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

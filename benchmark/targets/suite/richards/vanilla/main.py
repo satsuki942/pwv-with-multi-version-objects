@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 
 # The benchmark in its current state is a derivation from the SOM version,
 # which is derived from Mario Wolczko's Smalltalk version of DeltaBlue.
@@ -408,12 +407,11 @@ class _WorkerTaskDataRecord(_RBObject):
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        richards = Richards()
-        richards.benchmark()
-    
+    richards = Richards()
+    richards.benchmark()
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

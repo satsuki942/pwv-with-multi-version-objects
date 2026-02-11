@@ -1,7 +1,6 @@
 # broken
 import time
 
-TIMES = {LOOP_COUNT}
 
 # Adapted based on SOM benchmark.
 # Copyright 2011 Google Inc.
@@ -437,12 +436,11 @@ class _HavlakLoopFinder:
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        inner_iterations = 50
-        _LoopTesterApp().main(inner_iterations, 50, 10, 10, 5)
-    
+    inner_iterations = 50
+    _LoopTesterApp().main(inner_iterations, 50, 10, 10, 5)
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

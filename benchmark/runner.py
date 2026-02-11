@@ -46,6 +46,7 @@ def run_benchmarks(bench_config: BenchmarkConfig) -> Path | None:
     # 3. 各ターゲットについて「準備」と「測定」を順番に実行
     if bench_config.mode == 'switch':
         for target_name in targets_to_run:
+            log(f"---- Target: {target_name} ----")
             log(f"Preparing target: {target_name} (continuity)")
             target_result_dir0 = result_dir / target_name / STRATEGY_CONTINUITY
             target_result_dir1 = result_dir / target_name / STRATEGY_LATEST
@@ -62,6 +63,7 @@ def run_benchmarks(bench_config: BenchmarkConfig) -> Path | None:
             results_data.append(result)
     else:
         for target_name in targets_to_run:
+            log(f"---- Target: {target_name} ----")
             log(f"Preparing target: {target_name}")
             target_result_dir = result_dir / target_name
             

@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 
 # This code is derived from the SOM benchmarks, see AUTHORS.md file.
 # This benchmark is based on the minimal-json Java library maintained at:
@@ -521,11 +520,10 @@ class _JsonString(_JsonValue):
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        _Parser(_RAP_BENCHMARK_MINIFIED).parse()
-    
+    _Parser(_RAP_BENCHMARK_MINIFIED).parse()
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

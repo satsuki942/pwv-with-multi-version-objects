@@ -1,5 +1,4 @@
 import time
-TIMES = {LOOP_COUNT}
 class Num:
     def __init__(self, value):
         self.value = value
@@ -22,10 +21,9 @@ def fib(n):
 
 def main():
     start_time = time.perf_counter()
-    for _ in range(TIMES):
-        fib(Num(20))
+    fib(Num(20))
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
     print(avg_time)
 
 main()

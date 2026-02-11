@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 
 # This code is based on the SOM class library.
 #
@@ -48,12 +47,11 @@ class Sieve:
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        s = Sieve()
-        result = s.benchmark()
-    
+    s = Sieve()
+    result = s.benchmark()
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

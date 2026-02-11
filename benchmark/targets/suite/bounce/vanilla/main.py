@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 # This code is based on the SOM class library.
 #
 # Copyright (c) 2001-2021 see AUTHORS.md file
@@ -65,22 +64,21 @@ class Ball:
 def main():
     start_time = time.perf_counter()
 
-    for _ in range(TIMES):    
-        bounces = 0
-        random_generator = Random()
-        ball_count = 100
-        balls = [None] * ball_count
+    bounces = 0
+    random_generator = Random()
+    ball_count = 100
+    balls = [None] * ball_count
 
-        for i in range(ball_count):
-            balls[i] = Ball(random_generator)
+    for i in range(ball_count):
+        balls[i] = Ball(random_generator)
 
-        for _ in range(50):
-            for ball in balls:
-                if ball.bounce():
-                    bounces += 1
-    
+    for _ in range(50):
+        for ball in balls:
+            if ball.bounce():
+                bounces += 1
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

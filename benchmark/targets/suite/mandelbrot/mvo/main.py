@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 
 # This benchmark has been modified based on the SOM benchmark.
 #
@@ -98,12 +97,11 @@ class Mandelbrot__1__:
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        mandelbrot = Mandelbrot()
-        mandelbrot._mandelbrot(500)
-    
+    mandelbrot = Mandelbrot()
+    mandelbrot._mandelbrot(500)
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

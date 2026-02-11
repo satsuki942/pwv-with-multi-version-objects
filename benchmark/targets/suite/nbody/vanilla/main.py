@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 
 # The Computer Language Benchmarks Game
 # http://shootout.alioth.debian.org/
@@ -157,15 +156,14 @@ class NBodySystem:
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        system = NBodySystem()
-        for _ in range(250000):
-            system.advance(0.01)
+    system = NBodySystem()
+    for _ in range(250000):
+        system.advance(0.01)
 
-        system.energy()
-    
+    system.energy()
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 

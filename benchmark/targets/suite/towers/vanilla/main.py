@@ -1,6 +1,5 @@
 import time
 
-TIMES = {LOOP_COUNT}
 
 # This code is based on the SOM class library.
 #
@@ -83,12 +82,11 @@ class Towers:
 def main():
     start_time = time.perf_counter()
     
-    for _ in range(TIMES):
-        towers = Towers()
-        result = towers.benchmark()
-    
+    towers = Towers()
+    result = towers.benchmark()
+
     end_time = time.perf_counter()
-    avg_time = (end_time - start_time) / TIMES
+    avg_time = end_time - start_time
 
     print(avg_time)
 
