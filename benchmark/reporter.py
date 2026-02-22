@@ -43,7 +43,7 @@ def report_results_switch(csv_path: Path):
     x = list(range(len(names)))
 
     plt = _import_matplotlib()
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(16, 6))
 
     # Bars: ratio (no legend entry)
     ax.bar(
@@ -58,21 +58,21 @@ def report_results_switch(csv_path: Path):
     # Red reference line at 1.0 (no legend entry)
     ax.axhline(y=1.0, color="red", linestyle="-", linewidth=1.5)
 
-    ax.set_xlabel("Benchmarks", fontsize=16)
-    ax.set_ylabel("Switch-count ratio\n(Latest / Continuity) (×)", fontsize=16)
+    ax.set_xlabel("Benchmarks", fontsize=18)
+    ax.set_ylabel("Switch-count ratio\n(Latest / Continuity) (×)", fontsize=18)
 
     ax.set_xticks(x)
     ax.set_xticklabels(names, rotation=45, ha="right")
 
-    ax.tick_params(axis="x", labelsize=16)
-    ax.tick_params(axis="y", labelsize=16)
+    ax.tick_params(axis="x", labelsize=18)
+    ax.tick_params(axis="y", labelsize=18)
     ax.grid(axis="y", linestyle="--", alpha=0.7)
 
     # Right axis: counts (log)
     axr = ax.twinx()
     axr.set_yscale("log")
-    axr.set_ylabel("Switch count (log scale)", fontsize=16)
-    axr.tick_params(axis="y", labelsize=16)
+    axr.set_ylabel("Switch count (log scale)", fontsize=18)
+    axr.tick_params(axis="y", labelsize=18)
 
     # Lines: switch counts (legend kept)
     line1, = axr.plot(
@@ -90,7 +90,7 @@ def report_results_switch(csv_path: Path):
     leg = ax.legend(
         handles=[line1, line2],
         loc="upper right",
-        fontsize=14,
+        fontsize=16,
         frameon=True,
         alignment="right",   # matplotlib>=3.6 くらいで効く。古いと無視されるが害はない
     )
@@ -152,12 +152,12 @@ def _report_to_suite_bar_graph(results: list[Dict], csv_path: Path):
     
 
     # ax.set_title('MVO Compiler Performance Factor vs. Vanilla Python')
-    ax.set_xlabel('Benchmarks', fontsize=16)
-    ax.set_ylabel('Average execution time\nrelative to Python', fontsize=16)
+    ax.set_xlabel('Benchmarks', fontsize=18)
+    ax.set_ylabel('Average execution time\nrelative to Python', fontsize=18)
     ax.grid(axis='y', linestyle='--', alpha=0.7)
 
-    ax.tick_params(axis='x', labelsize=16)
-    ax.tick_params(axis='y', labelsize=16)
+    ax.tick_params(axis='x', labelsize=18)
+    ax.tick_params(axis='y', labelsize=18)
 
     # Y軸の基準線を 1.0 (vanillaと同じ速さ) に引く
     ax.axhline(y=1.0, color='black', linestyle='--', linewidth=1.2)
@@ -202,11 +202,11 @@ def _report_to_gradual_line_graph(results: list[Dict], csv_path: Path):
     ax.plot(x_values, y_values, marker='o', linestyle='-', color='dodgerblue')
     
     # ax.set_title('Performance Factor vs. Benchmark Parameter')
-    ax.set_xlabel('Number of Fallbacks (out of ~70k)', fontsize=16) # X軸のラベルを汎用的に
-    ax.set_ylabel('Average execution time\nrelative to Python', fontsize=16)
+    ax.set_xlabel('Number of Fallbacks (out of ~70k)', fontsize=18) # X軸のラベルを汎用的に
+    ax.set_ylabel('Average execution time\nrelative to Python', fontsize=18)
 
-    ax.tick_params(axis='x', labelsize=16)
-    ax.tick_params(axis='y', labelsize=16)
+    ax.tick_params(axis='x', labelsize=18)
+    ax.tick_params(axis='y', labelsize=18)
     ax.grid(True, linestyle='--', alpha=0.7)
     ax.axhline(y=1.0, color='black', linestyle='--', linewidth=1.2)
 
@@ -219,6 +219,10 @@ def _report_to_gradual_line_graph(results: list[Dict], csv_path: Path):
     plt.show()
 
 def _report_to_perf_overhead_bar_graph(results: list[Dict], csv_path: Path):
+    def _is_composed_benchmark(name: str) -> bool:
+        # Keep backward compatibility: old target name was "application".
+        normalized = re.sub(r"[\s_-]+", "", name).lower()
+        return normalized in {"composed", "application"}
 
     # 1. データを準備し、スループット倍率を計算
     valid_results = []
@@ -230,8 +234,11 @@ def _report_to_perf_overhead_bar_graph(results: list[Dict], csv_path: Path):
             r['throughput_ratio'] = v_time / t_time
             valid_results.append(r)
 
-    # スループット倍率で昇順にソート（遅い順）
-    sorted_results = sorted(valid_results, key=lambda r: r['throughput_ratio'])
+    # 通常はスループット倍率で昇順（遅い順）。Composed/Applicationは常に右端に配置。
+    sorted_results = sorted(
+        valid_results,
+        key=lambda r: (_is_composed_benchmark(r['name']), r['throughput_ratio'])
+    )
 
     if not sorted_results:
         return
@@ -239,17 +246,21 @@ def _report_to_perf_overhead_bar_graph(results: list[Dict], csv_path: Path):
     # グラフ描画用にデータを抽出
     target_names = [r['name'] for r in sorted_results]
     ratios = [r['throughput_ratio'] for r in sorted_results]
+    bar_colors = [
+        '#f2f2f2' if not _is_composed_benchmark(name) else '#f4a261'
+        for name in target_names
+    ]
 
     # 2. グラフを描画
     plt = _import_matplotlib()
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    ax.bar(target_names, ratios, color='white', edgecolor='black', hatch='xx', linewidth=1.0)
+    ax.bar(target_names, ratios, color=bar_colors, edgecolor='black', hatch='xx', linewidth=1.0)
 
-    ax.set_xlabel('Benchmarks', fontsize=16)
-    ax.set_ylabel('Average throughput\nrelative to Python', fontsize=16)
-    ax.tick_params(axis='x', labelsize=16)
-    ax.tick_params(axis='y', labelsize=16)
+    ax.set_xlabel('Benchmarks', fontsize=18)
+    ax.set_ylabel('Average throughput\nrelative to vanilla Python', fontsize=18)
+    ax.tick_params(axis='x', labelsize=18)
+    ax.tick_params(axis='y', labelsize=18)
 
     # Y軸の目盛りは 0.0〜1.0 を 0.2 刻みで固定（表示ラベル）
     tick_values = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
