@@ -1,8 +1,8 @@
 import ast
 
-from .ast_util import get_current_state_field_name, get_switch_to_version_method_name
+from .ast_util import get_current_state_field_name, get_switch_to_version_method_name, get_version_instances_singleton_name
 from .symbol_table.method_info import MethodInfo
-from ..signature import create_signature_check_condition
+from ..signature import create_signature_bind_check_call
 from ...common.util.constants import WRAPPER_SELF_ARG_NAME
 
 
@@ -16,7 +16,10 @@ def create_slow_path_dispatcher(class_name: str, method_name: str, overloads: li
     current_if_stmt = None
 
     for method_info in sorted_overloads:
-        condition = create_signature_check_condition(method_info.parameters)
+        condition = create_signature_bind_check_call(
+            _build_candidate_method_lookup(class_name, method_name, int(method_info.version)),
+            _build_wrapper_self_extra_kwargs(),
+        )
         if_body = [
             ast.Expr(value=ast.Call(
                 func=ast.Attribute(
@@ -64,3 +67,26 @@ def create_slow_path_dispatcher(class_name: str, method_name: str, overloads: li
         )]
 
     return [top_if_stmt] if top_if_stmt else []
+
+
+def _build_candidate_method_lookup(class_name: str, method_name: str, version: int) -> ast.Attribute:
+    return ast.Attribute(
+        value=ast.Subscript(
+            value=ast.Attribute(
+                value=ast.Name(id="self", ctx=ast.Load()),
+                attr=get_version_instances_singleton_name(class_name),
+                ctx=ast.Load(),
+            ),
+            slice=ast.Constant(value=version - 1),
+            ctx=ast.Load(),
+        ),
+        attr=method_name,
+        ctx=ast.Load(),
+    )
+
+
+def _build_wrapper_self_extra_kwargs() -> ast.Dict:
+    return ast.Dict(
+        keys=[ast.Constant(value=WRAPPER_SELF_ARG_NAME)],
+        values=[ast.Name(id="self", ctx=ast.Load())],
+    )

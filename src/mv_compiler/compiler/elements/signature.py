@@ -2,6 +2,9 @@ import ast
 from dataclasses import dataclass
 from typing import Literal
 
+SIGNATURE_INSPECT_ALIAS = "_mvo_inspect"
+SIGNATURE_BIND_HELPER_NAME = "_mvo_can_bind"
+
 
 @dataclass
 class ParameterInfo:
@@ -39,6 +42,9 @@ def create_parameter_infos(function_node: ast.FunctionDef, skip_first_arg: bool 
     defaults_start_index = len(pos_args) - len(args.defaults)
 
     for i, arg in enumerate(args.posonlyargs):
+        if skip_first_arg and i == 0:
+            continue
+
         parameters.append(ParameterInfo(
             name=arg.arg,
             type=ast.unparse(arg.annotation) if arg.annotation else "any",
@@ -47,7 +53,7 @@ def create_parameter_infos(function_node: ast.FunctionDef, skip_first_arg: bool 
         ))
 
     for i, arg in enumerate(args.args):
-        if skip_first_arg and i == 0:
+        if skip_first_arg and not args.posonlyargs and i == 0:
             continue
 
         combined_index = len(args.posonlyargs) + i
@@ -85,70 +91,38 @@ def create_parameter_infos(function_node: ast.FunctionDef, skip_first_arg: bool 
     return parameters
 
 
-def create_signature_check_condition(params: list[ParameterInfo]) -> ast.AST:
-    """
-    実行時引数 (*args, **kwargs) が関数・メソッドシグネチャに合致するかを
-    静的に判定するための複合ブール式を生成する。
-    """
-    # 前提: 位置専用引数、キーワード専用引数、可変長引数は未完全対応。
-    param_names = [p.name for p in params]
-    num_params = len(param_names)
-    required_param_indices = [i for i, p in enumerate(params) if not p.has_default_value]
+def build_signature_runtime_support() -> list[ast.AST]:
+    return ast.parse(f"""
+import inspect as {SIGNATURE_INSPECT_ALIAS}
 
-    conditions = []
+def {SIGNATURE_BIND_HELPER_NAME}(func, args, kwargs, extra_kwargs=None):
+    bind_kwargs = dict(kwargs)
+    if extra_kwargs is not None:
+        for name in extra_kwargs:
+            if name in bind_kwargs:
+                return False
+        bind_kwargs.update(extra_kwargs)
+    try:
+        {SIGNATURE_INSPECT_ALIAS}.signature(func).bind(*args, **bind_kwargs)
+    except TypeError:
+        return False
+    return True
+""").body
 
-    conditions.append(ast.Compare(
-        left=ast.Call(func=ast.Name(id='len', ctx=ast.Load()), args=[ast.Name(id='args', ctx=ast.Load())], keywords=[]),
-        ops=[ast.LtE()],
-        comparators=[ast.Constant(value=num_params)],
-    ))
 
-    conditions.append(ast.Compare(
-        left=ast.Call(func=ast.Attribute(value=ast.Name(id='kwargs', ctx=ast.Load()), attr='keys', ctx=ast.Load()), args=[], keywords=[]),
-        ops=[ast.LtE()],
-        comparators=[ast.Set(elts=[ast.Constant(value=name) for name in param_names])],
-    ))
-
-    for i, name in enumerate(param_names):
-        conditions.append(ast.UnaryOp(
-            op=ast.Not(),
-            operand=ast.BoolOp(op=ast.And(), values=[
-                ast.Compare(
-                    left=ast.Call(func=ast.Name(id='len', ctx=ast.Load()), args=[ast.Name(id='args', ctx=ast.Load())], keywords=[]),
-                    ops=[ast.Gt()],
-                    comparators=[ast.Constant(value=i)],
-                ),
-                ast.Compare(
-                    left=ast.Constant(value=name),
-                    ops=[ast.In()],
-                    comparators=[ast.Name(id='kwargs', ctx=ast.Load())],
-                ),
-            ]),
-        ))
-
-    for i in required_param_indices:
-        name = param_names[i]
-        conditions.append(ast.BoolOp(op=ast.Or(), values=[
-            ast.Compare(
-                left=ast.Call(func=ast.Name(id='len', ctx=ast.Load()), args=[ast.Name(id='args', ctx=ast.Load())], keywords=[]),
-                ops=[ast.Gt()],
-                comparators=[ast.Constant(value=i)],
-            ),
-            ast.Compare(
-                left=ast.Constant(value=name),
-                ops=[ast.In()],
-                comparators=[ast.Name(id='kwargs', ctx=ast.Load())],
-            ),
-        ]))
-
-    conditions.append(ast.Compare(
-        left=ast.BinOp(
-            left=ast.Call(func=ast.Name(id='len', ctx=ast.Load()), args=[ast.Name(id='args', ctx=ast.Load())], keywords=[]),
-            op=ast.Add(),
-            right=ast.Call(func=ast.Name(id='len', ctx=ast.Load()), args=[ast.Name(id='kwargs', ctx=ast.Load())], keywords=[]),
-        ),
-        ops=[ast.LtE()],
-        comparators=[ast.Constant(value=num_params)],
-    ))
-
-    return ast.BoolOp(op=ast.And(), values=conditions)
+def create_signature_bind_check_call(
+    func: ast.expr,
+    extra_kwargs: ast.expr | None = None,
+) -> ast.Call:
+    args: list[ast.expr] = [
+        func,
+        ast.Name(id="args", ctx=ast.Load()),
+        ast.Name(id="kwargs", ctx=ast.Load()),
+    ]
+    if extra_kwargs is not None:
+        args.append(extra_kwargs)
+    return ast.Call(
+        func=ast.Name(id=SIGNATURE_BIND_HELPER_NAME, ctx=ast.Load()),
+        args=args,
+        keywords=[],
+    )

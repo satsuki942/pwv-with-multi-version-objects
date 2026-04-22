@@ -6,6 +6,7 @@ from ..symbol_table.method_info import MethodInfo
 
 from ..ast_util import *
 from ..dispatch import create_slow_path_dispatcher
+from ...signature import create_signature_bind_check_call
 from ....common.util.constants import (
     DEFAULT_VERSION_SELECTION_STRATEGY,
     INITIALIZE_METHOD_NAME,
@@ -70,7 +71,7 @@ def _generate_consistent_signature_stub(
 
     # 1. メソッドシグネチャを再構成
     stub_args = copy.deepcopy(method_info.ast_node.args)
-    stub_args.args[0] = ast.arg(arg='self')
+    _set_public_receiver_name(stub_args)
     
     stub_method = ast.FunctionDef(
         name=method_name,
@@ -162,6 +163,13 @@ def _generate_consistent_signature_stub(
     stub_method.body.append(ast.Try(body=fast_path_body, handlers=[except_handler], orelse=[], finalbody=[]))
     return stub_method
 
+
+def _set_public_receiver_name(args: ast.arguments) -> None:
+    if args.posonlyargs:
+        args.posonlyargs[0] = ast.arg(arg='self')
+    elif args.args:
+        args.args[0] = ast.arg(arg='self')
+
 def _generate_inconsistent_signature_stub(
     symbol_table: SymbolTable,
     base_name: str,
@@ -215,33 +223,52 @@ def _generate_inconsistent_signature_stub(
         
         stub_method.body.append(ast_if)
 
-    # 2. fast path の AST（try ブロック）を生成
-    fast_path_body = [ast.Return(value=ast.Call(
-        func=ast.Attribute(
-            value=ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()), attr=get_current_state_field_name(base_name), ctx=ast.Load()),
-            attr=method_name, ctx=ast.Load()
-        ),
+    current_method_name = "_mvo_current_method"
+    current_method_lookup = ast.Attribute(
+        value=ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()), attr=get_current_state_field_name(base_name), ctx=ast.Load()),
+        attr=method_name, ctx=ast.Load()
+    )
+    current_method_call = ast.Call(
+        func=ast.Name(id=current_method_name, ctx=ast.Load()),
         args=[ast.Starred(value=ast.Name(id='args', ctx=ast.Load()), ctx=ast.Load())],
         keywords=[
             ast.keyword(arg=WRAPPER_SELF_ARG_NAME, value=ast.Name(id='self', ctx=ast.Load())),
             ast.keyword(arg=None, value=ast.Name(id='kwargs', ctx=ast.Load()))
         ]
-    ))]
-
-    # 3. slow path の AST（except ブロック）を生成
-    slow_path_body = create_slow_path_dispatcher(base_name, method_name, overloads)
-    
-    except_handler = ast.ExceptHandler(
-        type=ast.Tuple(elts=[ast.Name(id='AttributeError', ctx=ast.Load()), ast.Name(id='TypeError', ctx=ast.Load())], ctx=ast.Load()),
-        name=None,
-        body=slow_path_body
     )
 
-    # 4. try-except 構造に組み立て
+    # 2. current state に対象メソッドが存在するかだけを確認する。
+    except_handler = ast.ExceptHandler(
+        type=ast.Name(id='AttributeError', ctx=ast.Load()),
+        name=None,
+        body=create_slow_path_dispatcher(base_name, method_name, overloads)
+    )
+
+    bind_check = create_signature_bind_check_call(
+        ast.Name(id=current_method_name, ctx=ast.Load()),
+        ast.Dict(
+            keys=[ast.Constant(value=WRAPPER_SELF_ARG_NAME)],
+            values=[ast.Name(id='self', ctx=ast.Load())],
+        ),
+    )
+    orelse_body = [
+        ast.If(
+            test=bind_check,
+            body=[ast.Return(value=current_method_call)],
+            orelse=[],
+        ),
+        *create_slow_path_dispatcher(base_name, method_name, overloads),
+    ]
+
     stub_method.body.append(ast.Try(
-        body=fast_path_body,
+        body=[
+            ast.Assign(
+                targets=[ast.Name(id=current_method_name, ctx=ast.Store())],
+                value=current_method_lookup,
+            )
+        ],
         handlers=[except_handler],
-        orelse=[],
+        orelse=orelse_body,
         finalbody=[]
     ))
 

@@ -6,6 +6,7 @@ from ..common.util import logger
 from ..common.util.constants import DEFAULT_VERSION_SELECTION_STRATEGY
 from ..elements.class_.compiler import build_unified_classes_for_module
 from ..elements.function.compiler import build_function_export
+from ..elements.signature import build_signature_runtime_support
 from ..elements.variable.compiler import (
     build_module_runtime,
     build_variable_export,
@@ -41,12 +42,19 @@ def transform_versioned_module(
     import_nodes = _copy_declared_imports(module_mapping, versions)
     import_nodes.extend(_copy_sync_imports(inferred_exports, sync_functions_dict))
     new_body.extend(_dedupe_imports(import_nodes))
-    new_body.extend(build_module_runtime(version_selection_strategy, latest_version))
 
     class_exports = {
         name: spec for name, spec in inferred_exports.items()
         if spec.get("kind") == "class"
     }
+    function_exports = {
+        name: spec for name, spec in inferred_exports.items()
+        if spec.get("kind") == "function"
+    }
+    if class_exports or function_exports:
+        new_body.extend(build_signature_runtime_support())
+    new_body.extend(build_module_runtime(version_selection_strategy, latest_version))
+
     if class_exports:
         new_body.extend(build_unified_classes_for_module(
             class_exports,

@@ -224,11 +224,15 @@ class TopLevelMethodTransformer(ast.NodeTransformer):
             self.generic_visit(node)
             return node
 
-        if not node.args.args:
+        if node.args.posonlyargs:
+            self_arg = node.args.posonlyargs[0]
+        elif node.args.args:
+            self_arg = node.args.args[0]
+        else:
             return node
 
         self.is_in_top_level_method = True
-        self.top_level_self_name = node.args.args[0].arg
+        self.top_level_self_name = self_arg.arg
 
         # 1. `_wrapper_self` をシグネチャに追加
         wrapper_self_arg = ast.arg(arg=WRAPPER_SELF_ARG_NAME)

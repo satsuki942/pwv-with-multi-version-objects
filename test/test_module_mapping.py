@@ -245,6 +245,154 @@ def test_function_current_version_is_stored_per_export(tmp_path):
     ]
 
 
+def test_function_dispatch_uses_python_signature_binding(tmp_path):
+    input_dir = tmp_path / "sources"
+    output_dir = tmp_path / "out"
+    mapping_dir = input_dir / "_mv_mapping"
+    mapping_dir.mkdir(parents=True)
+
+    (input_dir / "sample__1__.py").write_text("def choose(x, /):\n    return f'pos:{x}'\n", encoding="utf-8")
+    (input_dir / "sample__2__.py").write_text("def choose(*items):\n    return f'var:{len(items)}'\n", encoding="utf-8")
+    (input_dir / "sample__3__.py").write_text("def choose(x, *, mode):\n    return f'kwonly:{x}:{mode}'\n", encoding="utf-8")
+    (input_dir / "sample__4__.py").write_text("def choose(**kwargs):\n    return f'kwargs:{sorted(kwargs)}'\n", encoding="utf-8")
+    (input_dir / "main.py").write_text(
+        "from sample import choose\n"
+        "\n"
+        "if __name__ == '__main__':\n"
+        "    print(choose(1))\n"
+        "    print(choose(x=2, mode='m'))\n"
+        "    print(choose())\n"
+        "    print(choose(1, 2, 3))\n"
+        "    print(choose(extra=5))\n"
+        "    try:\n"
+        "        choose(1, x=2)\n"
+        "    except TypeError as e:\n"
+        "        print(type(e).__name__, str(e))\n",
+        encoding="utf-8",
+    )
+    (mapping_dir / "modules.json").write_text(
+        '{"modules": {"sample": {"exports": {"choose": {"kind": "function"}}}}}',
+        encoding="utf-8",
+    )
+
+    compile(input_dir, output_dir)
+
+    assert execute("main.py", output_dir).strip().splitlines() == [
+        "pos:1",
+        "kwonly:2:m",
+        "var:0",
+        "var:3",
+        "kwargs:['extra']",
+        "TypeError No version of 'choose' matches the provided arguments.",
+    ]
+
+
+def test_method_dispatch_uses_python_signature_binding(tmp_path):
+    input_dir = tmp_path / "sources"
+    output_dir = tmp_path / "out"
+    mapping_dir = input_dir / "_mv_mapping"
+    mapping_dir.mkdir(parents=True)
+
+    (input_dir / "sample__1__.py").write_text(
+        "class Runner:\n"
+        "    def call(self, x, /):\n"
+        "        return f'pos:{x}'\n",
+        encoding="utf-8",
+    )
+    (input_dir / "sample__2__.py").write_text(
+        "class Runner:\n"
+        "    def call(self, *items):\n"
+        "        return f'var:{len(items)}'\n",
+        encoding="utf-8",
+    )
+    (input_dir / "sample__3__.py").write_text(
+        "class Runner:\n"
+        "    def call(self, x, *, mode):\n"
+        "        return f'kwonly:{x}:{mode}'\n",
+        encoding="utf-8",
+    )
+    (input_dir / "sample__4__.py").write_text(
+        "class Runner:\n"
+        "    def call(self, **kwargs):\n"
+        "        return f'kwargs:{sorted(kwargs)}'\n",
+        encoding="utf-8",
+    )
+    (input_dir / "main.py").write_text(
+        "from sample import Runner\n"
+        "\n"
+        "if __name__ == '__main__':\n"
+        "    runner = Runner()\n"
+        "    print(runner.call(1))\n"
+        "    print(runner.call(x=2, mode='m'))\n"
+        "    print(runner.call())\n"
+        "    print(runner.call(1, 2, 3))\n"
+        "    print(runner.call(extra=5))\n"
+        "    try:\n"
+        "        runner.call(1, x=2)\n"
+        "    except TypeError as e:\n"
+        "        print(type(e).__name__, str(e))\n",
+        encoding="utf-8",
+    )
+    (mapping_dir / "modules.json").write_text(
+        '{"modules": {"sample": {"exports": {"Runner": {"kind": "class"}}}}}',
+        encoding="utf-8",
+    )
+
+    compile(input_dir, output_dir)
+
+    assert execute("main.py", output_dir).strip().splitlines() == [
+        "pos:1",
+        "kwonly:2:m",
+        "var:0",
+        "var:3",
+        "kwargs:['extra']",
+        "TypeError No version of 'call' matches the provided arguments.",
+    ]
+
+
+def test_consistent_positional_only_method_signature_compiles(tmp_path):
+    input_dir = tmp_path / "sources"
+    output_dir = tmp_path / "out"
+    mapping_dir = input_dir / "_mv_mapping"
+    mapping_dir.mkdir(parents=True)
+
+    (input_dir / "sample__1__.py").write_text(
+        "class Runner:\n"
+        "    def call(self, x, /):\n"
+        "        return f'v1:{x}'\n",
+        encoding="utf-8",
+    )
+    (input_dir / "sample__2__.py").write_text(
+        "class Runner:\n"
+        "    def call(self, x, /):\n"
+        "        return f'v2:{x}'\n",
+        encoding="utf-8",
+    )
+    (input_dir / "main.py").write_text(
+        "from sample import Runner\n"
+        "\n"
+        "if __name__ == '__main__':\n"
+        "    runner = Runner()\n"
+        "    print(runner.call(1))\n"
+        "    try:\n"
+        "        runner.call(x=1)\n"
+        "    except TypeError as e:\n"
+        "        print(type(e).__name__)\n",
+        encoding="utf-8",
+    )
+    (mapping_dir / "modules.json").write_text(
+        '{"modules": {"sample": {"exports": {"Runner": {"kind": "class"}}}}}',
+        encoding="utf-8",
+    )
+
+    compile(input_dir, output_dir)
+
+    assert execute("main.py", output_dir).strip().splitlines() == [
+        "v1:1",
+        "TypeError",
+    ]
+
+
 def test_versioned_values_resolve_from_their_own_strategy(tmp_path):
     input_dir = tmp_path / "sources"
     output_dir = tmp_path / "out"

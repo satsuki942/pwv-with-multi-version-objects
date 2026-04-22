@@ -3,7 +3,7 @@ import copy
 
 from ...common.util import logger
 from ...common.util.constants import VERSION_SELECTION_LATEST
-from ..signature import ParameterInfo, create_parameter_infos, create_signature_check_condition
+from ..signature import ParameterInfo, create_parameter_infos, create_signature_bind_check_call
 
 
 def build_function_export(
@@ -102,7 +102,7 @@ def _build_current_version_dispatch(
                 ops=[ast.Eq()],
                 comparators=[ast.Constant(value=version)],
             ),
-            create_signature_check_condition(parameter_infos_by_version[version]),
+            create_signature_bind_check_call(ast.Name(id=_versioned_func_name(version, export_name), ctx=ast.Load())),
         ])
         if_stmt = ast.If(
             test=condition,
@@ -142,7 +142,7 @@ def _build_signature_dispatcher(
             ast.Return(value=_build_local_versioned_function_call(version, export_name)),
         ]
         if_stmt = ast.If(
-            test=create_signature_check_condition(parameter_infos_by_version[version]),
+            test=create_signature_bind_check_call(ast.Name(id=_versioned_func_name(version, export_name), ctx=ast.Load())),
             body=if_body,
             orelse=[],
         )

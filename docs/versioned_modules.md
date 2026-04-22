@@ -69,9 +69,12 @@ top-level 変数は値を作る構文ではなく名前束縛なので、デフ�
 
 `VersionedValue` は `get()`, `set(new_value)` を持つ。値を読むたびに、その値がどこから参照されたかではなく、対象 `VersionedValue` オブジェクト自身の strategy と現在 version に従って実体値を決定する。関数やメソッドの実装 version は、そこで参照される `VersionedValue` の version を固定しない。加えて、基本的な演算・属性アクセス・添字アクセスは内部の現在版の値へ委譲する。ただし、`type(X) is int` のような完全な型透過性は保証しない。
 
+## 関数・メソッド dispatch
+
+関数・メソッド dispatch の呼び出し可能判定は、生成後の実体関数に対する `inspect.signature(...).bind(...)` の成否で決める。つまり、`*args` / `**kwargs` / keyword-only / positional-only を含む Python の通常の関数呼び出し binding に従い、binding できない候補は呼び出さない。
+
 ## 未対応範囲
 
-- 関数・メソッド dispatch の引数判定における `*args` / `**kwargs` / keyword-only / positional-only を含む複雑なシグネチャの完全対応
 - 名前が異なる要素同士の mapping
 - class / function / variable など種類が異なる要素同士の mapping
 - コンパイル外コードでの名前再束縛
