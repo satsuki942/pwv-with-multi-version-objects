@@ -1,9 +1,9 @@
 import argparse
 from pathlib import Path
 
-from mvo_compiler.mvo_compiler import compile, execute
-from mvo_compiler.util import logger
-from mvo_compiler.util.constants import DEFAULT_VERSION_SELECTION_STRATEGY, VERSION_SELECTION_STRATEGIES
+from mv_compiler.api import compile, execute
+from mv_compiler.compiler.common.util import logger
+from mv_compiler.compiler.common.util.constants import DEFAULT_VERSION_SELECTION_STRATEGY, VERSION_SELECTION_STRATEGIES
 
 INPUT_BASE_PATH = Path(".")
 OUTPUT_BASE_PATH = Path("output")

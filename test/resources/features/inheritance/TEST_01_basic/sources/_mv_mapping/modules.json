@@ -1,0 +1,11 @@
+{
+  "modules": {
+    "car": {
+      "exports": {
+        "Car": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "modules": {
+    "models/location": {
+      "exports": {
+        "Location": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

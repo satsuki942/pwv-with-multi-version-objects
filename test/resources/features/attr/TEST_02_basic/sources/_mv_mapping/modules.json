@@ -1,0 +1,11 @@
+{
+  "modules": {
+    "log": {
+      "exports": {
+        "Log": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

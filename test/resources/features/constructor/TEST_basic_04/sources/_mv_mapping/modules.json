@@ -1,0 +1,18 @@
+{
+  "modules": {
+    "location": {
+      "exports": {
+        "Location": {
+          "kind": "class"
+        }
+      }
+    },
+    "point": {
+      "exports": {
+        "Point": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "modules": {
+    "a": {
+      "exports": {
+        "A": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

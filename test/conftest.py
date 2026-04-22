@@ -5,6 +5,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TEST_ROOT = PROJECT_ROOT / "test"
 RESOURCES_ROOT = TEST_ROOT / "resources"
+collect_ignore_glob = ["resources/**/sources/*.py"]
 
 def pytest_addoption(parser):
     """Adds the --target_dir command-line option to pytest."""

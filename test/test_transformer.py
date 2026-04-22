@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from mvo_compiler.mvo_compiler import compile, execute
+from mv_compiler.api import compile, execute
 
 TEST_ROOT = Path(__file__).resolve().parent
 RESOURCES_ROOT = TEST_ROOT / "resources"

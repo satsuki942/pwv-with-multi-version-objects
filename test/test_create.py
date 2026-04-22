@@ -7,27 +7,34 @@ RESOURCES_ROOT = TEST_ROOT / "resources"
 
 # File template for the test case
 MAIN_PY_TEMPLATE = """
-# versioned class definitions must be in the same file
-class Example__1__:
+from example import Example
+
+
+def main():
+    obj = Example(10)
+    print(obj.value())
+
+
+if __name__ == "__main__":
+    main()
+"""
+
+EXAMPLE_V1_TEMPLATE = """
+class Example:
     def __init__(self, x: int):
         self.x = x
 
     def value(self):
         return self.x
+"""
 
-class Example__2__:
+EXAMPLE_V2_TEMPLATE = """
+class Example:
     def __init__(self, y: int):
         self.y = y
 
     def value(self):
         return self.y * 2
-
-def main():
-    obj = Example__1__(10)
-    print(obj.value())
-
-if __name__ == "__main__":
-    main()
 """
 
 def create_test_case(test_case_path: str):
@@ -65,8 +72,10 @@ def create_test_case(test_case_path: str):
         error_log(f"Failed to create directories: {e}")
         return
 
-    # --- 2. Create main.py and expected.txt files ---
+    # --- 2. Create source and expected files ---
     (input_dir / "main.py").write_text(MAIN_PY_TEMPLATE, encoding="utf-8")
+    (input_dir / "example__1__.py").write_text(EXAMPLE_V1_TEMPLATE, encoding="utf-8")
+    (input_dir / "example__2__.py").write_text(EXAMPLE_V2_TEMPLATE, encoding="utf-8")
     expected_file.touch()
 
     log("\nSuccessfully created test case structure:")

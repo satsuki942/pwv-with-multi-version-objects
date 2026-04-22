@@ -1,0 +1,11 @@
+{
+  "modules": {
+    "point": {
+      "exports": {
+        "Point": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

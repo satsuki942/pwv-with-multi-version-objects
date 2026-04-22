@@ -1,0 +1,18 @@
+{
+  "modules": {
+    "member": {
+      "exports": {
+        "Member": {
+          "kind": "class"
+        }
+      }
+    },
+    "student": {
+      "exports": {
+        "Student": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

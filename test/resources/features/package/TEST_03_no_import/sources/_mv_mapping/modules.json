@@ -1,0 +1,11 @@
+{
+  "modules": {
+    "cat": {
+      "exports": {
+        "Cat": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

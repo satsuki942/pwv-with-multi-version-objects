@@ -2,7 +2,7 @@
 
 ## 概要
 
-本プロジェクトは、論文で提案する「PWV with Multi-Version Objects (MVO)」の PoC トランスパイラです。Python の AST を解析し、バージョン付きクラス群を統合クラスに変換して実行します。
+本プロジェクトは、論文で提案する「PWV with Multi-Version Objects (MVO)」の PoC トランスパイラです。Python の AST を解析し、複数版モジュール内の class / function / top-level variable を単一の実行可能モジュールへ統合します。
 
 ## 要件
 
@@ -22,7 +22,7 @@ uv sync
 uv sync の内容
 - .venv を作成
 - 依存関係をインストール
-- プロジェクトを editable でインストール（src/mvo_compiler を import 可能にする）
+- プロジェクトを editable でインストール（src/mv_compiler を import 可能にする）
 
 ### 仮想環境の有効化
 
@@ -79,37 +79,48 @@ python main.py test/resources/basic_cases/TEST_basic_01/sources --strategy lates
 
 compile() に渡すディレクトリ配下を再帰的にスキャンします。
 - **/*.py はソースファイル
-- **/*_sync.py は同期モジュール
-- **/*.json は互換性(属性)定義
+- `_mv_mapping/` はコンパイル用メタデータの専用ディレクトリ
+- `_mv_mapping/modules.json` は複数版モジュール内の公開要素 mapping
+- `_mv_mapping/**/*_sync.py` は同期モジュール
+- `_mv_mapping/**/*.json` は `modules.json` を除き互換性(属性)定義
 
-### 2. バージョン付きクラス
+### 2. 複数版モジュール
 
-- 同一ベース名のバージョンは同一ファイルに定義します。
-- クラス名は `<BaseName>__<version>__` 形式で、version は整数です。
-- クラス定義はトップレベルメソッドのみを対象にします。
-- クラス属性（AnnAssign/Assign）は無視されます。
-- 内部クラスは未対応です。
+- `foo__1__.py` と `foo__2__.py` は、同じ論理モジュール `foo.py` の別バージョンとして統合されます。
+- version は整数です。1版だけの `foo__1__.py` も、現在のコンパイル単位として扱えます。
+- 通常ファイルはそのままコピーされます。通常ファイル内のクラス名は、versioned module の判定には使いません。
+- mapping に書かれた公開要素だけを複数版対応としてコンパイルします。
+- mapping に書かれていない要素は latest version 側の定義をそのまま出力します。
 
 **例**
 ```python
-class Point__1__:
+# point__1__.py
+class Point:
     def __init__(self, x: int):
         self.x = x
 
-class Point__2__:
+# point__2__.py
+class Point:
     def __init__(self, r: float):
         self.r = r
 ```
 
-### 3. 継承
+### 3. バージョン付きクラス
+
+- クラスは複数版モジュール内では通常のクラス名で定義します。
+- クラス定義はトップレベルメソッドのみを対象にします。
+- クラス属性（AnnAssign/Assign）は無視されます。
+- 内部クラスは未対応です。
+
+### 4. 継承
 
 - バージョン付きクラスは通常クラス/バージョン付きクラスを継承できます。
-- `Foo__2__` のようにバージョン付きクラスを継承した場合、バージョン情報も継承関係として記録されます。
+- 複数版モジュール内のクラスは、コンパイル時に内部用の版付きクラスへ展開され、そこで継承関係も記録されます。
 
-### 4. 同期モジュール (sync_modules)
+### 5. 同期モジュール (sync_modules)
 
 - ファイル名は `<BaseName>_sync.py` です（例: Point_sync.py）。
-- 位置は入力ディレクトリ配下ならどこでも構いません。
+- 位置は `_mv_mapping/` 配下です。
 - 同期関数名は `_?sync_from_v<from>_to_v<to>` 形式です。先頭の `_` は任意です。
 - 同期関数の引数は 1 つ（wrapper オブジェクト）です。
 - 同期モジュール内の import 文は統合クラスの先頭へ移されます。
@@ -121,9 +132,9 @@ def _sync_from_v1_to_v2(wrapper_obj):
     del wrapper_obj._v1
 ```
 
-### 5. 互換性(属性)定義 JSON
+### 6. 互換性(属性)定義 JSON
 
-入力ディレクトリ配下の任意の .json を読み込みます。
+`_mv_mapping/` 配下の `modules.json` 以外の .json を読み込みます。
 
 スキーマ
 ```json
@@ -136,9 +147,32 @@ def _sync_from_v1_to_v2(wrapper_obj):
 
 - `<version>` は整数の文字列です。
 
-### 6. エントリポイント
+### 7. module mapping JSON
+
+`_mv_mapping/modules.json` に `modules` キーを置くと、複数版モジュール内の公開要素の対応関係として扱います。
+
+```json
+{
+  "modules": {
+    "point": {
+      "exports": {
+        "Point": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}
+```
+
+現時点では同名・同種要素だけを mapping できます。mapping がない要素は latest 側の定義をそのまま公開します。
+版間で意味が異なる変数だけ、mapping JSONで `versioned_value` または `versioned_reference` として明示してください。
+
+### 8. エントリポイント
 
 main.py 経由で実行する場合、入力ディレクトリ直下に main.py が存在することを想定します。
+
+詳細な入力規約、mapping例、未対応範囲は `docs/versioned_modules.md` を参照してください。
 
 ## テスト
 
@@ -163,14 +197,21 @@ pytest --target_dir=basic_cases/TEST_basic_01
 ├── main.py
 ├── pyproject.toml
 ├── src/
-│   └── mvo_compiler/
-│       ├── mvo_compiler.py
-│       ├── scanner.py
-│       ├── transformer.py
-│       ├── builder/
-│       ├── symbol_table/
-│       ├── util/
-│       └── templates/
+│   └── mv_compiler/
+│       ├── api.py
+│       ├── compiler/
+│       │   ├── project.py
+│       │   ├── scanner.py
+│       │   ├── module/
+│       │   │   └── compiler.py
+│       │   ├── elements/
+│       │   │   ├── class_/
+│       │   │   ├── function/
+│       │   │   └── variable/
+│       │   └── common/
+│       │       └── util/
+│       └── runtime/
+│           └── executor.py
 └── test/
     ├── conftest.py
     ├── test_create.py

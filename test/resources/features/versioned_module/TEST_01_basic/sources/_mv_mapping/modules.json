@@ -1,0 +1,22 @@
+{
+  "modules": {
+    "sample": {
+      "exports": {
+        "THRESHOLD": {
+          "kind": "variable",
+          "binding": "versioned_value",
+          "versions": {
+            "1": "THRESHOLD",
+            "2": "THRESHOLD"
+          }
+        },
+        "Point": {
+          "kind": "class"
+        },
+        "label": {
+          "kind": "function"
+        }
+      }
+    }
+  }
+}
