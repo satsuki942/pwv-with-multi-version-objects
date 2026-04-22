@@ -1,44 +1,26 @@
 import ast
 import copy
 
-from ...common.util.constants import VERSION_SELECTION_LATEST
-
 
 _VERSIONED_VALUE_RUNTIME = """
 class VersionedValue:
-    def __init__(self, values, strategy='continuity', current_version_getter=None):
+    def __init__(self, values, strategy='continuity'):
         object.__setattr__(self, '_values', {int(k): v for k, v in values.items()})
         object.__setattr__(self, '_strategy', strategy)
-        object.__setattr__(self, '_current_version_getter', current_version_getter)
-        object.__setattr__(self, '_current_version', min(self._values.keys()))
-        object.__setattr__(self, '_forced_version', None)
+        current_version = max(self._values.keys()) if strategy == 'latest' else min(self._values.keys())
+        object.__setattr__(self, '_current_version', current_version)
 
-    def _resolve_version(self, version=None):
-        if version is not None:
-            return int(version)
-        if self._forced_version is not None:
-            return self._forced_version
-        if self._strategy == 'latest':
-            return max(self._values.keys())
-        if self._current_version_getter is not None:
-            return int(self._current_version_getter())
+    def _resolve_version(self):
         return self._current_version
 
-    def _value(self, version=None):
-        version = self._resolve_version(version)
-        object.__setattr__(self, '_current_version', version)
-        return self._values[version]
+    def _value(self):
+        return self._values[self._resolve_version()]
 
-    def switch_to(self, version):
-        object.__setattr__(self, '_forced_version', int(version))
-        object.__setattr__(self, '_current_version', int(version))
-        return self
+    def get(self):
+        return self._value()
 
-    def get(self, version=None):
-        return self._value(version)
-
-    def set(self, new_value, version=None):
-        self._values[self._resolve_version(version)] = new_value
+    def set(self, new_value):
+        self._values[self._resolve_version()] = new_value
         return new_value
 
     def __getattr__(self, name):
@@ -102,19 +84,7 @@ def collect_versioned_value_names(exports: dict) -> set[str]:
 
 
 def build_module_runtime(strategy: str, latest_version: int) -> list[ast.AST]:
-    runtime_nodes = ast.parse(_VERSIONED_VALUE_RUNTIME).body
-    current_version = latest_version if strategy == VERSION_SELECTION_LATEST else 1
-    runtime_nodes.append(ast.Assign(
-        targets=[ast.Name(id="_MVO_CURRENT_VERSION", ctx=ast.Store())],
-        value=ast.Constant(value=current_version),
-    ))
-    runtime_nodes.append(ast.parse(
-        "def _mvo_set_module_version(version):\n"
-        "    global _MVO_CURRENT_VERSION\n"
-        "    _MVO_CURRENT_VERSION = int(version)\n"
-        "    return _MVO_CURRENT_VERSION\n"
-    ).body[0])
-    return runtime_nodes
+    return ast.parse(_VERSIONED_VALUE_RUNTIME).body
 
 
 def build_variable_export(
@@ -148,13 +118,6 @@ def build_variable_export(
                 ],
                 keywords=[
                     ast.keyword(arg="strategy", value=ast.Constant(value=version_selection_strategy)),
-                    ast.keyword(
-                        arg="current_version_getter",
-                        value=ast.Lambda(
-                            args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
-                            body=ast.Name(id="_MVO_CURRENT_VERSION", ctx=ast.Load()),
-                        ),
-                    ),
                 ],
             ),
         )

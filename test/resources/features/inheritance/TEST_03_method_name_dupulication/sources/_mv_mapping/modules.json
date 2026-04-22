@@ -8,6 +8,10 @@
       }
     },
     "student": {
+      "imports": {
+        "1": ["from member import Member"],
+        "2": ["from member import Member"]
+      },
       "exports": {
         "Student": {
           "kind": "class"

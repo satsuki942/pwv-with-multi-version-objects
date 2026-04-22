@@ -5,7 +5,6 @@ from .builder.unified_class_builder import build_unified_class
 from .symbol_table.symbol_table import SymbolTable
 from .symbol_table.symbol_table_builder import SymbolTableBuilder
 from ...common.util import logger
-from ..variable.reference_rewriter import VersionedValueNameRewriter
 
 
 def build_unified_classes_for_module(
@@ -27,7 +26,6 @@ def build_unified_classes_for_module(
                 continue
             class_copy = copy.deepcopy(class_node)
             class_copy.name = f"{export_name}__{version}__"
-            class_copy = VersionedValueNameRewriter(versioned_value_names, version).visit(class_copy)
             synthetic_body.append(class_copy)
 
     synthetic_module = ast.Module(body=synthetic_body, type_ignores=[])

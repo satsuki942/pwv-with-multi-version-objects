@@ -1,6 +1,10 @@
 {
   "modules": {
     "car": {
+      "imports": {
+        "1": ["from vehicle import Vehicle"],
+        "2": ["from vehicle import Vehicle"]
+      },
       "exports": {
         "Car": {
           "kind": "class"

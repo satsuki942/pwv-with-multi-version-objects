@@ -1,6 +1,10 @@
 {
   "modules": {
     "location": {
+      "imports": {
+        "1": ["from point import Point"],
+        "2": ["from point import Point"]
+      },
       "exports": {
         "Location": {
           "kind": "class"

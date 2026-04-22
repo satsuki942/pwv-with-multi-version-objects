@@ -38,8 +38,9 @@ def transform_versioned_module(
     versioned_value_names = collect_versioned_value_names(inferred_exports)
 
     new_body: list[ast.AST] = []
-    new_body.extend(_copy_imports(latest_tree))
-    new_body.extend(_copy_sync_imports(inferred_exports, sync_functions_dict))
+    import_nodes = _copy_declared_imports(module_mapping, versions)
+    import_nodes.extend(_copy_sync_imports(inferred_exports, sync_functions_dict))
+    new_body.extend(_dedupe_imports(import_nodes))
     new_body.extend(build_module_runtime(version_selection_strategy, latest_version))
 
     class_exports = {
@@ -101,22 +102,49 @@ def _collect_top_level_defs(tree: ast.AST) -> dict[str, ast.AST]:
     return defs
 
 
-def _copy_imports(tree: ast.AST) -> list[ast.AST]:
-    return [
-        copy.deepcopy(node)
-        for node in tree.body
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-    ]
+def _copy_declared_imports(module_mapping: dict | None, versions: list[int]) -> list[ast.AST]:
+    imports_by_version = (module_mapping or {}).get("imports", {})
+    if imports_by_version is None:
+        imports_by_version = {}
+    if not isinstance(imports_by_version, dict):
+        raise ValueError("Module imports must be an object")
+
+    imports: list[ast.AST] = []
+    for version in versions:
+        raw_imports = imports_by_version.get(str(version), [])
+        if not isinstance(raw_imports, list) or not all(isinstance(item, str) for item in raw_imports):
+            raise ValueError(f"Module imports for v{version} must be a list of strings")
+        for import_source in raw_imports:
+            imports.append(_parse_import_spec(import_source, version))
+    return imports
+
+
+def _parse_import_spec(import_source: str, version: int) -> ast.AST:
+    try:
+        tree = ast.parse(import_source)
+    except SyntaxError as e:
+        raise ValueError(f"Invalid import spec for v{version}: {import_source}") from e
+
+    if len(tree.body) != 1 or not isinstance(tree.body[0], (ast.Import, ast.ImportFrom)):
+        raise ValueError(f"Import spec for v{version} must contain exactly one import statement: {import_source}")
+    return tree.body[0]
 
 
 def _copy_sync_imports(exports: dict, sync_functions_dict: dict) -> list[ast.AST]:
-    imports: dict[str, ast.AST] = {}
+    imports: list[ast.AST] = []
     for export_name, spec in exports.items():
         if spec.get("kind") != "class":
             continue
         sync_imports, _ = sync_functions_dict.get(export_name, ([], []))
         for import_node in sync_imports:
-            imports[ast.unparse(import_node)] = copy.deepcopy(import_node)
+            imports.append(copy.deepcopy(import_node))
+    return imports
+
+
+def _dedupe_imports(import_nodes: list[ast.AST]) -> list[ast.AST]:
+    imports: dict[str, ast.AST] = {}
+    for import_node in import_nodes:
+        imports.setdefault(ast.unparse(import_node), import_node)
     return list(imports.values())
 
 
