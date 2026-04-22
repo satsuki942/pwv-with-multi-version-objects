@@ -5,7 +5,7 @@ from ..symbol_table.symbol_table import SymbolTable
 from ..symbol_table.method_info import MethodInfo
 
 from ..ast_util import *
-from ..builder_util import _create_slow_path_dispatcher
+from ..dispatch import create_slow_path_dispatcher
 from ....common.util.constants import (
     DEFAULT_VERSION_SELECTION_STRATEGY,
     INITIALIZE_METHOD_NAME,
@@ -229,7 +229,7 @@ def _generate_inconsistent_signature_stub(
     ))]
 
     # 3. slow path の AST（except ブロック）を生成
-    slow_path_body = _create_slow_path_dispatcher(base_name, method_name, overloads)
+    slow_path_body = create_slow_path_dispatcher(base_name, method_name, overloads)
     
     except_handler = ast.ExceptHandler(
         type=ast.Tuple(elts=[ast.Name(id='AttributeError', ctx=ast.Load()), ast.Name(id='TypeError', ctx=ast.Load())], ctx=ast.Load()),

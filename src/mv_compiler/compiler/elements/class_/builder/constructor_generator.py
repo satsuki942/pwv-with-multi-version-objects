@@ -3,7 +3,7 @@ import ast
 from ..symbol_table.symbol_table import SymbolTable
 from ..ast_util import *
 from ..template_util import load_template_ast, TemplateRenamer
-from ..builder_util import _create_slow_path_dispatcher
+from ..dispatch import create_slow_path_dispatcher
 from ....common.util import logger
 from ....common.util.constants import INITIALIZE_METHOD_NAME
 
@@ -23,7 +23,7 @@ def build_constructor(symbol_table: SymbolTable, class_name: str) -> ast.Functio
     initialize_overloads = class_info.methods.get(INITIALIZE_METHOD_NAME, [])
 
     # 2. スローパスのディスパッチ（if-elif）生成
-    slow_path_body = _create_slow_path_dispatcher(
+    slow_path_body = create_slow_path_dispatcher(
         class_name, INITIALIZE_METHOD_NAME, initialize_overloads
     )
     if not slow_path_body:
