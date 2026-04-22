@@ -32,6 +32,59 @@ class ParameterInfo:
         )
 
 
+def create_parameter_infos(function_node: ast.FunctionDef, skip_first_arg: bool = False) -> list[ParameterInfo]:
+    parameters: list[ParameterInfo] = []
+    args = function_node.args
+    pos_args = args.posonlyargs + args.args
+    defaults_start_index = len(pos_args) - len(args.defaults)
+
+    for i, arg in enumerate(args.posonlyargs):
+        parameters.append(ParameterInfo(
+            name=arg.arg,
+            type=ast.unparse(arg.annotation) if arg.annotation else "any",
+            has_default_value=(i >= defaults_start_index),
+            kind='POSITIONAL_ONLY',
+        ))
+
+    for i, arg in enumerate(args.args):
+        if skip_first_arg and i == 0:
+            continue
+
+        combined_index = len(args.posonlyargs) + i
+        parameters.append(ParameterInfo(
+            name=arg.arg,
+            type=ast.unparse(arg.annotation) if arg.annotation else "any",
+            has_default_value=(combined_index >= defaults_start_index),
+            kind='POSITIONAL_OR_KEYWORD',
+        ))
+
+    if args.vararg:
+        parameters.append(ParameterInfo(
+            name=args.vararg.arg,
+            type=ast.unparse(args.vararg.annotation) if args.vararg.annotation else "any",
+            has_default_value=False,
+            kind='VAR_POSITIONAL',
+        ))
+
+    for i, arg in enumerate(args.kwonlyargs):
+        parameters.append(ParameterInfo(
+            name=arg.arg,
+            type=ast.unparse(arg.annotation) if arg.annotation else "any",
+            has_default_value=args.kw_defaults[i] is not None,
+            kind='KEYWORD_ONLY',
+        ))
+
+    if args.kwarg:
+        parameters.append(ParameterInfo(
+            name=args.kwarg.arg,
+            type=ast.unparse(args.kwarg.annotation) if args.kwarg.annotation else "any",
+            has_default_value=False,
+            kind='VAR_KEYWORD',
+        ))
+
+    return parameters
+
+
 def create_signature_check_condition(params: list[ParameterInfo]) -> ast.AST:
     """
     実行時引数 (*args, **kwargs) が関数・メソッドシグネチャに合致するかを

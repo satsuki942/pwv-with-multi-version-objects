@@ -2,7 +2,8 @@ import ast
 
 from .symbol_table import SymbolTable
 from .class_info import ClassInfo
-from .method_info import MethodInfo, ParameterInfo
+from .method_info import MethodInfo
+from ...signature import create_parameter_infos
 from ..ast_util import get_class_version_info, get_class_version_info_from_name, UNVERSIONED_CLASS_TAG
 from ....common.util.constants import INITIALIZE_METHOD_NAME
 
@@ -76,70 +77,10 @@ class SymbolTableBuilder(ast.NodeVisitor):
 
     # --- HELPER METHODS ---
     def _create_method_info(self, method_node: ast.FunctionDef, version: str) -> MethodInfo:
-        parameters = []
-        args = method_node.args
-        
-        # デフォルト値の開始位置を計算
-        pos_and_kw_args = args.posonlyargs + args.args
-        defaults_start_index = len(pos_and_kw_args) - len(args.defaults)
-
-        # --- 1. 位置専用引数 (/) の収集 ---
-        for i, arg in enumerate(args.posonlyargs):
-            parameters.append(ParameterInfo(
-                name=arg.arg,
-                type=ast.unparse(arg.annotation) if arg.annotation else "any",
-                has_default_value=(i >= defaults_start_index),
-                kind='POSITIONAL_ONLY'
-            ))
-
-        # --- 2. 通常引数の収集 ---
-        for i, arg in enumerate(args.args):
-            # 'self' は無視
-            if i == 0:
-                continue
-            
-            combined_index = len(args.posonlyargs) + i
-            parameters.append(ParameterInfo(
-                name=arg.arg,
-                type=ast.unparse(arg.annotation) if arg.annotation else "any",
-                has_default_value=(combined_index >= defaults_start_index),
-                kind='POSITIONAL_OR_KEYWORD'
-            ))
-            
-        # --- 3. 可変長位置引数 (*args) の収集 ---
-        if args.vararg:
-            arg = args.vararg
-            parameters.append(ParameterInfo(
-                name=arg.arg,
-                type=ast.unparse(arg.annotation) if arg.annotation else "any",
-                has_default_value=False,
-                kind='VAR_POSITIONAL'
-            ))
-
-        # --- 4. キーワード専用引数 (*) の収集 ---
-        for i, arg in enumerate(args.kwonlyargs):
-            has_default = args.kw_defaults[i] is not None
-            parameters.append(ParameterInfo(
-                name=arg.arg,
-                type=ast.unparse(arg.annotation) if arg.annotation else "any",
-                has_default_value=has_default,
-                kind='KEYWORD_ONLY'
-            ))
-
-        # --- 5. 可変長キーワード引数 (**kwargs) の収集 ---
-        if args.kwarg:
-            arg = args.kwarg
-            parameters.append(ParameterInfo(
-                name=arg.arg,
-                type=ast.unparse(arg.annotation) if arg.annotation else "any",
-                has_default_value=False,
-                kind='VAR_KEYWORD'
-            ))
-        
         return MethodInfo(
             name=method_node.name,
             version=version,
-            parameters=parameters,
+            parameters=create_parameter_infos(method_node, skip_first_arg=True),
             ast_node=method_node
         )
 

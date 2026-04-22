@@ -3,7 +3,7 @@ import copy
 
 from ...common.util import logger
 from ...common.util.constants import VERSION_SELECTION_LATEST
-from ..signature import ParameterInfo, create_signature_check_condition
+from ..signature import ParameterInfo, create_parameter_infos, create_signature_check_condition
 
 
 def build_function_export(
@@ -25,7 +25,7 @@ def build_function_export(
         func_copy = copy.deepcopy(func_node)
         func_copy.name = _versioned_func_name(version, export_name)
         impl_functions[version] = func_copy
-        parameter_infos_by_version[version] = _create_parameter_infos(func_node)
+        parameter_infos_by_version[version] = create_parameter_infos(func_node)
 
     # 版ごとの実体関数は公開関数のローカル実装として閉じ込める。
     wrapper_body: list[ast.AST] = [impl_functions[version] for version in versions if version in impl_functions]
@@ -85,57 +85,6 @@ def _build_local_versioned_function_call(version: int, export_name: str) -> ast.
         args=[ast.Starred(value=ast.Name(id="args", ctx=ast.Load()), ctx=ast.Load())],
         keywords=[ast.keyword(arg=None, value=ast.Name(id="kwargs", ctx=ast.Load()))],
     )
-
-
-def _create_parameter_infos(function_node: ast.FunctionDef) -> list[ParameterInfo]:
-    parameters: list[ParameterInfo] = []
-    args = function_node.args
-    pos_args = args.posonlyargs + args.args
-    defaults_start_index = len(pos_args) - len(args.defaults)
-
-    for i, arg in enumerate(args.posonlyargs):
-        parameters.append(ParameterInfo(
-            name=arg.arg,
-            type=ast.unparse(arg.annotation) if arg.annotation else "any",
-            has_default_value=(i >= defaults_start_index),
-            kind="POSITIONAL_ONLY",
-        ))
-
-    for i, arg in enumerate(args.args):
-        combined_index = len(args.posonlyargs) + i
-        parameters.append(ParameterInfo(
-            name=arg.arg,
-            type=ast.unparse(arg.annotation) if arg.annotation else "any",
-            has_default_value=(combined_index >= defaults_start_index),
-            kind="POSITIONAL_OR_KEYWORD",
-        ))
-
-    if args.vararg:
-        parameters.append(ParameterInfo(
-            name=args.vararg.arg,
-            type=ast.unparse(args.vararg.annotation) if args.vararg.annotation else "any",
-            has_default_value=False,
-            kind="VAR_POSITIONAL",
-        ))
-
-    for i, arg in enumerate(args.kwonlyargs):
-        parameters.append(ParameterInfo(
-            name=arg.arg,
-            type=ast.unparse(arg.annotation) if arg.annotation else "any",
-            has_default_value=args.kw_defaults[i] is not None,
-            kind="KEYWORD_ONLY",
-        ))
-
-    if args.kwarg:
-        parameters.append(ParameterInfo(
-            name=args.kwarg.arg,
-            type=ast.unparse(args.kwarg.annotation) if args.kwarg.annotation else "any",
-            has_default_value=False,
-            kind="VAR_KEYWORD",
-        ))
-
-    return parameters
-
 
 def _build_current_version_dispatch(
     export_name: str,
