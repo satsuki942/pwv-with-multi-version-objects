@@ -1,5 +1,4 @@
 import ast
-import re
 import json
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
@@ -12,6 +11,7 @@ from .common.util.constants import (
     PROJECT_VERSIONED_MODULES_KEY,
     PROJECT_MODULE_MAPPINGS_KEY,
 )
+from .versioning import parse_sync_module_filename, parse_versioned_module_filename
 
 def create_project_structure(input_dir: Path) -> Dict:
     """
@@ -34,9 +34,8 @@ def create_project_structure(input_dir: Path) -> Dict:
         if not _is_relative_to(path, mapping_dir)
     ]
     source_files = []
-    versioned_module_pattern = re.compile(r"(.+)__(\d+)__\.py$")
     for file_path in py_files:
-        if versioned_module_pattern.match(file_path.name):
+        if parse_versioned_module_filename(file_path.name)[0] is not None:
             _register_versioned_module(input_dir, file_path, project_structure)
         else:
             source_files.append(file_path)
@@ -59,13 +58,13 @@ def create_project_structure(input_dir: Path) -> Dict:
             logger.error_log(f"Failed to parse {source_file}: {e}")
 
     # --- 状態同期ファイル ---
-    sync_pattern = re.compile(r"(.+)_sync\.py$")
     for state_transformation_file in sync_files:
-        sync_match = sync_pattern.match(state_transformation_file.name)
+        base_name = parse_sync_module_filename(state_transformation_file.name)
+        if base_name is None:
+            continue
         try:
             with open(state_transformation_file, 'r', encoding='utf-8') as f:
                 source_code = f.read()
-            base_name = sync_match.group(1)
             project_structure[PROJECT_SYNC_MODULES_KEY][base_name] = _parse_sync_modules(base_name, source_code)
         except Exception as e:
             logger.error_log(f"Failed to parse {state_transformation_file}: {e}")
@@ -119,13 +118,10 @@ def _parse_sync_modules(base_name: str, source_code: str) -> Tuple:
 
 def _register_versioned_module(input_dir: Path, file_path: Path, project_structure: Dict) -> None:
     """foo__1__.py を論理モジュール foo.py のversion 1として登録する。"""
-    versioned_module_pattern = re.compile(r"(.+)__(\d+)__\.py$")
-    match = versioned_module_pattern.match(file_path.name)
-    if not match:
+    base_name, version = parse_versioned_module_filename(file_path.name)
+    if base_name is None or version is None:
         return
 
-    base_name = match.group(1)
-    version = int(match.group(2))
     relative_path = file_path.relative_to(input_dir)
     logical_rel_path = relative_path.with_name(f"{base_name}.py")
 
