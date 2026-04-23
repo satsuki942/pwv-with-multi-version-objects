@@ -69,14 +69,14 @@ top-level 変数は値を作る構文ではなく名前束縛なので、デフ�
 
 `VersionedValue` は `get()`, `set(new_value)` を持つ。値を読むたびに、その値がどこから参照されたかではなく、対象 `VersionedValue` オブジェクト自身の strategy と現在 version に従って実体値を決定する。関数やメソッドの実装 version は、そこで参照される `VersionedValue` の version を固定しない。加えて、基本的な演算・属性アクセス・添字アクセスは内部の現在版の値へ委譲する。ただし、`type(X) is int` のような完全な型透過性は保証しない。
 
+`versioned_value` として公開した名前は、`X = ...` のように再束縛されないことを前提とする。値を差し替える必要がある場合は `X.set(new_value)` を使う。コンパイル対象モジュール内の `global X; X = ...` や、コンパイル外コードからの `X = ...` は現在追跡しない。
+
 ## 関数・メソッド dispatch
 
 関数・メソッド dispatch の呼び出し可能判定は、生成後の実体関数に対する `inspect.signature(...).bind(...)` の成否で決める。つまり、`*args` / `**kwargs` / keyword-only / positional-only を含む Python の通常の関数呼び出し binding に従い、binding できない候補は呼び出さない。
 
 ## 未対応範囲
 
-- 名前が異なる要素同士の mapping
-- class / function / variable など種類が異なる要素同士の mapping
-- コンパイル外コードでの名前再束縛
-- 関数内の `global X; X = ...` を `VersionedValue.set()` へ変換する処理
-- 複雑な変数間同期関数
+現在の主な未対応範囲は、異名 export mapping、種類が異なる要素同士の mapping、変数再束縛の検出・診断、クラス構文の拡張、複雑な状態同期、import 取り扱いの改善である。
+
+実装ロードマップは [未対応範囲ロードマップ](roadmap.md) を参照する。

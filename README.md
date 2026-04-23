@@ -173,7 +173,7 @@ def _sync_from_v1_to_v2(wrapper_obj):
 
 main.py 経由で実行する場合、入力ディレクトリ直下に main.py が存在することを想定します。
 
-詳細な入力規約、mapping例、未対応範囲は `docs/versioned_modules.md` を参照してください。
+詳細な入力規約と mapping 例は `docs/versioned_modules.md`、未対応範囲の実装ロードマップは `docs/roadmap.md` を参照してください。
 
 ## テスト
 
