@@ -5,6 +5,20 @@ import pytest
 from mv_compiler.api import compile, execute
 
 
+def write_evolution(mapping_dir, entities, imports=None, versions=None):
+    mapping_dir.mkdir(parents=True, exist_ok=True)
+    spec = {
+        "modules": {
+            "sample": {
+                "versions": versions or [1, 2],
+                "imports": imports or {},
+                "entities": entities,
+            }
+        }
+    }
+    (mapping_dir / "evolution.json").write_text(json.dumps(spec), encoding="utf-8")
+
+
 def test_unmapped_versioned_module_exports_latest_definitions(tmp_path):
     input_dir = tmp_path / "sources"
     output_dir = tmp_path / "out"
@@ -39,10 +53,10 @@ def test_unmapped_versioned_module_exports_latest_definitions(tmp_path):
 
     compile(input_dir, output_dir)
 
-    assert execute("main.py", output_dir).strip().splitlines() == ["v2", "new"]
+    assert execute("main.py", output_dir).strip().splitlines() == ["v1", "old"]
 
 
-def test_mapping_rejects_name_changes(tmp_path):
+def test_evolution_accepts_name_changes(tmp_path):
     input_dir = tmp_path / "sources"
     output_dir = tmp_path / "out"
     mapping_dir = input_dir / "_mv_mapping"
@@ -50,13 +64,20 @@ def test_mapping_rejects_name_changes(tmp_path):
 
     (input_dir / "sample__1__.py").write_text("class Point:\n    pass\n", encoding="utf-8")
     (input_dir / "sample__2__.py").write_text("class RenamedPoint:\n    pass\n", encoding="utf-8")
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"Point": {"kind": "class", "versions": {"1": "Point", "2": "RenamedPoint"}}}}}}',
-        encoding="utf-8",
-    )
+    write_evolution(mapping_dir, {
+        "point": {
+            "state": {"sync": "none"},
+            "versions": {
+                "1": {"kind": "class", "name": "Point"},
+                "2": {"kind": "class", "name": "RenamedPoint"},
+            },
+        }
+    })
 
-    with pytest.raises(ValueError, match="Only same-name export mappings"):
-        compile(input_dir, output_dir)
+    compile(input_dir, output_dir)
+    generated = (output_dir / "sample.py").read_text(encoding="utf-8")
+    assert "class Point" in generated
+    assert "class RenamedPoint" in generated
 
 
 def test_mapping_rejects_kind_mismatches(tmp_path):
@@ -67,10 +88,14 @@ def test_mapping_rejects_kind_mismatches(tmp_path):
 
     (input_dir / "sample__1__.py").write_text("class Point:\n    pass\n", encoding="utf-8")
     (input_dir / "sample__2__.py").write_text("def Point():\n    return None\n", encoding="utf-8")
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"Point": {"kind": "class"}}}}}',
-        encoding="utf-8",
-    )
+    write_evolution(mapping_dir, {
+        "point": {
+            "versions": {
+                "1": {"kind": "class", "name": "Point"},
+                "2": {"kind": "class", "name": "Point"},
+            }
+        }
+    })
 
     with pytest.raises(ValueError, match="missing or mismatched"):
         compile(input_dir, output_dir)
@@ -84,9 +109,10 @@ def test_declared_imports_are_unioned_by_version(tmp_path):
 
     (input_dir / "sample__1__.py").write_text("class Point:\n    pass\n", encoding="utf-8")
     (input_dir / "sample__2__.py").write_text("class Point:\n    pass\n", encoding="utf-8")
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"imports": {"1": ["import os", "from math import sqrt"], "2": ["import os", "from decimal import Decimal as D"]}, "exports": {"Point": {"kind": "class"}}}}}',
-        encoding="utf-8",
+    write_evolution(
+        mapping_dir,
+        {"point": {"versions": {"1": {"kind": "class", "name": "Point"}, "2": {"kind": "class", "name": "Point"}}}},
+        imports={"1": ["import os", "from math import sqrt"], "2": ["import os", "from decimal import Decimal as D"]},
     )
 
     compile(input_dir, output_dir)
@@ -105,9 +131,10 @@ def test_source_imports_are_ignored_when_not_declared(tmp_path):
 
     (input_dir / "sample__1__.py").write_text("import os\n\nclass Point:\n    pass\n", encoding="utf-8")
     (input_dir / "sample__2__.py").write_text("import sys\n\nclass Point:\n    pass\n", encoding="utf-8")
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"imports": {"1": ["from math import sqrt"], "2": []}, "exports": {"Point": {"kind": "class"}}}}}',
-        encoding="utf-8",
+    write_evolution(
+        mapping_dir,
+        {"point": {"versions": {"1": {"kind": "class", "name": "Point"}, "2": {"kind": "class", "name": "Point"}}}},
+        imports={"1": ["from math import sqrt"], "2": []},
     )
 
     compile(input_dir, output_dir)
@@ -126,9 +153,9 @@ def test_missing_imports_are_treated_as_empty(tmp_path):
 
     (input_dir / "sample__1__.py").write_text("import os\n\nclass Point:\n    pass\n", encoding="utf-8")
     (input_dir / "sample__2__.py").write_text("import sys\n\nclass Point:\n    pass\n", encoding="utf-8")
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"Point": {"kind": "class"}}}}}',
-        encoding="utf-8",
+    write_evolution(
+        mapping_dir,
+        {"point": {"versions": {"1": {"kind": "class", "name": "Point"}, "2": {"kind": "class", "name": "Point"}}}},
     )
 
     compile(input_dir, output_dir)
@@ -146,16 +173,11 @@ def test_mapping_rejects_invalid_import_specs(tmp_path, import_spec):
     mapping_dir.mkdir(parents=True)
 
     (input_dir / "sample__1__.py").write_text("class Point:\n    pass\n", encoding="utf-8")
-    (mapping_dir / "modules.json").write_text(
-        json.dumps({
-            "modules": {
-                "sample": {
-                    "imports": {"1": [import_spec]},
-                    "exports": {"Point": {"kind": "class"}},
-                }
-            }
-        }),
-        encoding="utf-8",
+    write_evolution(
+        mapping_dir,
+        {"point": {"versions": {"1": {"kind": "class", "name": "Point"}}}},
+        imports={"1": [import_spec]},
+        versions=[1],
     )
 
     with pytest.raises(ValueError, match="Import spec"):
@@ -181,16 +203,21 @@ def test_function_dispatch_uses_callable_version_for_three_versions(tmp_path):
         "    print(choose(4, 5))\n",
         encoding="utf-8",
     )
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"choose": {"kind": "function"}}}}}',
-        encoding="utf-8",
+    write_evolution(
+        mapping_dir,
+        {"choose": {"versions": {
+            "1": {"kind": "function", "name": "choose"},
+            "2": {"kind": "function", "name": "choose"},
+            "3": {"kind": "function", "name": "choose"},
+        }}},
+        versions=[1, 2, 3],
     )
 
     compile(input_dir, output_dir)
 
     assert execute("main.py", output_dir).strip().splitlines() == [
         "v1:1",
-        "v2:1,2",
+        "v3:1,2,0",
         "v3:1,2,3",
         "v3:4,5,0",
     ]
@@ -229,10 +256,10 @@ def test_function_current_version_is_stored_per_export(tmp_path):
         "    print(left._mvo_current_version, right._mvo_current_version)\n",
         encoding="utf-8",
     )
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"left": {"kind": "function"}, "right": {"kind": "function"}}}}}',
-        encoding="utf-8",
-    )
+    write_evolution(mapping_dir, {
+        "left": {"versions": {"1": {"kind": "function", "name": "left"}, "2": {"kind": "function", "name": "left"}}},
+        "right": {"versions": {"1": {"kind": "function", "name": "right"}, "2": {"kind": "function", "name": "right"}}},
+    })
 
     compile(input_dir, output_dir)
 
@@ -243,6 +270,80 @@ def test_function_current_version_is_stored_per_export(tmp_path):
         "right-v1:3",
         "2 1",
     ]
+
+
+def test_public_name_can_refer_to_different_entities_by_version(tmp_path):
+    input_dir = tmp_path / "sources"
+    output_dir = tmp_path / "out"
+    mapping_dir = input_dir / "_mv_mapping"
+    mapping_dir.mkdir(parents=True)
+
+    (input_dir / "sample__1__.py").write_text("x = 'position-v1'\nz = 'count-v1'\n", encoding="utf-8")
+    (input_dir / "sample__2__.py").write_text("x = 'count-v2'\ny = 'position-v2'\n", encoding="utf-8")
+    (input_dir / "main.py").write_text(
+        "from sample import x, y, z\n"
+        "\n"
+        "if __name__ == '__main__':\n"
+        "    print(x.get())\n"
+        "    print(y.get())\n"
+        "    print(z.get())\n",
+        encoding="utf-8",
+    )
+    write_evolution(mapping_dir, {
+        "position": {
+            "state": {"sync": "required"},
+            "versions": {
+                "1": {"kind": "variable", "name": "x"},
+                "2": {"kind": "variable", "name": "y"},
+            },
+        },
+        "count": {
+            "state": {"sync": "required"},
+            "versions": {
+                "1": {"kind": "variable", "name": "z"},
+                "2": {"kind": "variable", "name": "x"},
+            },
+        },
+    })
+
+    compile(input_dir, output_dir)
+
+    assert execute("main.py", output_dir).strip().splitlines() == [
+        "position-v1",
+        "position-v1",
+        "count-v1",
+    ]
+
+
+def test_kind_change_entity_uses_access_facade(tmp_path):
+    input_dir = tmp_path / "sources"
+    output_dir = tmp_path / "out"
+    mapping_dir = input_dir / "_mv_mapping"
+    mapping_dir.mkdir(parents=True)
+
+    (input_dir / "sample__1__.py").write_text("x = 10\n", encoding="utf-8")
+    (input_dir / "sample__2__.py").write_text("def y(n):\n    return n * 2\n", encoding="utf-8")
+    (input_dir / "main.py").write_text(
+        "from sample import x, y\n"
+        "\n"
+        "if __name__ == '__main__':\n"
+        "    print(x.get())\n"
+        "    print(y(5))\n",
+        encoding="utf-8",
+    )
+    write_evolution(mapping_dir, {
+        "position": {
+            "state": {"sync": "required"},
+            "versions": {
+                "1": {"kind": "variable", "name": "x"},
+                "2": {"kind": "function", "name": "y"},
+            },
+        },
+    })
+
+    compile(input_dir, output_dir)
+
+    assert execute("main.py", output_dir).strip().splitlines() == ["10", "10"]
 
 
 def test_function_dispatch_uses_python_signature_binding(tmp_path):
@@ -270,17 +371,23 @@ def test_function_dispatch_uses_python_signature_binding(tmp_path):
         "        print(type(e).__name__, str(e))\n",
         encoding="utf-8",
     )
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"choose": {"kind": "function"}}}}}',
-        encoding="utf-8",
+    write_evolution(
+        mapping_dir,
+        {"choose": {"versions": {
+            "1": {"kind": "function", "name": "choose"},
+            "2": {"kind": "function", "name": "choose"},
+            "3": {"kind": "function", "name": "choose"},
+            "4": {"kind": "function", "name": "choose"},
+        }}},
+        versions=[1, 2, 3, 4],
     )
 
     compile(input_dir, output_dir)
 
     assert execute("main.py", output_dir).strip().splitlines() == [
         "pos:1",
-        "kwonly:2:m",
-        "var:0",
+        "kwargs:['mode', 'x']",
+        "kwargs:[]",
         "var:3",
         "kwargs:['extra']",
         "TypeError No version of 'choose' matches the provided arguments.",
@@ -333,17 +440,23 @@ def test_method_dispatch_uses_python_signature_binding(tmp_path):
         "        print(type(e).__name__, str(e))\n",
         encoding="utf-8",
     )
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"Runner": {"kind": "class"}}}}}',
-        encoding="utf-8",
+    write_evolution(
+        mapping_dir,
+        {"runner": {"versions": {
+            "1": {"kind": "class", "name": "Runner"},
+            "2": {"kind": "class", "name": "Runner"},
+            "3": {"kind": "class", "name": "Runner"},
+            "4": {"kind": "class", "name": "Runner"},
+        }}},
+        versions=[1, 2, 3, 4],
     )
 
     compile(input_dir, output_dir)
 
     assert execute("main.py", output_dir).strip().splitlines() == [
         "pos:1",
-        "kwonly:2:m",
-        "var:0",
+        "kwargs:['mode', 'x']",
+        "kwargs:[]",
         "var:3",
         "kwargs:['extra']",
         "TypeError No version of 'call' matches the provided arguments.",
@@ -380,10 +493,7 @@ def test_consistent_positional_only_method_signature_compiles(tmp_path):
         "        print(type(e).__name__)\n",
         encoding="utf-8",
     )
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"Runner": {"kind": "class"}}}}}',
-        encoding="utf-8",
-    )
+    write_evolution(mapping_dir, {"runner": {"versions": {"1": {"kind": "class", "name": "Runner"}, "2": {"kind": "class", "name": "Runner"}}}})
 
     compile(input_dir, output_dir)
 
@@ -410,10 +520,10 @@ def test_versioned_values_resolve_from_their_own_strategy(tmp_path):
         "    print(LEFT.get(), RIGHT.get())\n",
         encoding="utf-8",
     )
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"LEFT": {"kind": "variable", "binding": "versioned_value"}, "RIGHT": {"kind": "variable", "binding": "versioned_value"}}}}}',
-        encoding="utf-8",
-    )
+    write_evolution(mapping_dir, {
+        "left": {"versions": {"1": {"kind": "variable", "name": "LEFT"}, "2": {"kind": "variable", "name": "LEFT"}}},
+        "right": {"versions": {"1": {"kind": "variable", "name": "RIGHT"}, "2": {"kind": "variable", "name": "RIGHT"}}},
+    })
 
     compile(input_dir, output_dir)
 
@@ -440,10 +550,7 @@ def test_versioned_value_latest_strategy_initializes_to_latest_value(tmp_path):
         "    print(VALUE.get())\n",
         encoding="utf-8",
     )
-    (mapping_dir / "modules.json").write_text(
-        '{"modules": {"sample": {"exports": {"VALUE": {"kind": "variable", "binding": "versioned_value"}}}}}',
-        encoding="utf-8",
-    )
+    write_evolution(mapping_dir, {"value": {"versions": {"1": {"kind": "variable", "name": "VALUE"}, "2": {"kind": "variable", "name": "VALUE"}}}})
 
     compile(input_dir, output_dir, version_selection_strategy="latest")
 

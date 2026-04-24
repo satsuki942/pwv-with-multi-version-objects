@@ -93,7 +93,7 @@ def _build_current_version_dispatch(
 ) -> ast.If | None:
     top_if_stmt: ast.If | None = None
     current_if_stmt: ast.If | None = None
-    for version in versions:
+    for version in sorted(versions, reverse=True):
         if version not in parameter_infos_by_version:
             continue
         condition = ast.BoolOp(op=ast.And(), values=[
@@ -125,7 +125,7 @@ def _build_signature_dispatcher(
 ) -> list[ast.AST]:
     top_if_stmt: ast.If | None = None
     current_if_stmt: ast.If | None = None
-    for version in versions:
+    for version in sorted(versions, reverse=True):
         if version not in parameter_infos_by_version:
             continue
         if_body = [

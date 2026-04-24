@@ -11,7 +11,7 @@ from .common.util.constants import (
     PROJECT_INCOMPATIBILITIES_KEY,
     PROJECT_NORMAL_FILES_KEY,
     PROJECT_VERSIONED_MODULES_KEY,
-    PROJECT_MODULE_MAPPINGS_KEY,
+    PROJECT_EVOLUTION_SPECS_KEY,
 )
 
 def compile_project(
@@ -66,11 +66,11 @@ def transform_project(
 
     for rel_path, versioned_trees in project_structure[PROJECT_VERSIONED_MODULES_KEY].items():
         module_key = rel_path.with_suffix("").as_posix()
-        module_mapping = project_structure[PROJECT_MODULE_MAPPINGS_KEY].get(module_key)
+        evolution_spec = project_structure[PROJECT_EVOLUTION_SPECS_KEY].get(module_key)
         _, transformed_ast = transform_versioned_module(
             rel_path,
             versioned_trees,
-            module_mapping,
+            evolution_spec,
             project_structure[PROJECT_SYNC_MODULES_KEY],
             project_structure[PROJECT_INCOMPATIBILITIES_KEY],
             version_selection_strategy,

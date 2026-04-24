@@ -80,9 +80,8 @@ python main.py test/resources/basic_cases/TEST_basic_01/sources --strategy lates
 compile() に渡すディレクトリ配下を再帰的にスキャンします。
 - **/*.py はソースファイル
 - `_mv_mapping/` はコンパイル用メタデータの専用ディレクトリ
-- `_mv_mapping/modules.json` は複数版モジュール内の公開要素 mapping
+- `_mv_mapping/evolution.json` は複数版モジュール内の進化仕様
 - `_mv_mapping/**/*_sync.py` は同期モジュール
-- `_mv_mapping/**/*.json` は `modules.json` を除き互換性(属性)定義
 
 ### 2. 複数版モジュール
 
@@ -90,8 +89,8 @@ compile() に渡すディレクトリ配下を再帰的にスキャンします�
 - version は整数です。1版だけの `foo__1__.py` も、現在のコンパイル単位として扱えます。
 - 通常ファイルはそのままコピーされます。通常ファイル内のクラス名は、versioned module の判定には使いません。
 - 通常ファイルから複数版モジュールを参照するときは、`foo__1__` / `foo__2__` ではなく、統合後の論理モジュール名 `foo` を import します。
-- mapping に書かれた公開要素だけを複数版対応としてコンパイルします。
-- mapping に書かれていない要素は latest version 側の定義をそのまま出力します。
+- `evolution.json` に書かれた意味的 entity を複数版対応としてコンパイルします。
+- `evolution.json` がない場合は、PoC 用フォールバックとして同名 entity をソースから推論します。
 
 **例**
 ```python
@@ -133,32 +132,26 @@ def _sync_from_v1_to_v2(wrapper_obj):
     del wrapper_obj._v1
 ```
 
-### 6. 互換性(属性)定義 JSON
+### 6. evolution JSON
 
-`_mv_mapping/` 配下の `modules.json` 以外の .json を読み込みます。
-
-スキーマ
-```json
-{
-  "<BaseName>": {
-    "<version>": ["attr1", "attr2"]
-  }
-}
-```
-
-- `<version>` は整数の文字列です。
-
-### 7. module mapping JSON
-
-`_mv_mapping/modules.json` に `modules` キーを置くと、複数版モジュール内の公開要素の対応関係として扱います。
+`_mv_mapping/evolution.json` に module ごとの version、import、意味的 entity の対応を書きます。
 
 ```json
 {
   "modules": {
     "point": {
-      "exports": {
-        "Point": {
-          "kind": "class"
+      "versions": [1, 2],
+      "imports": {
+        "1": [],
+        "2": []
+      },
+      "entities": {
+        "point": {
+          "state": {"sync": "none"},
+          "versions": {
+            "1": {"kind": "class", "name": "Point"},
+            "2": {"kind": "class", "name": "PolarPoint"}
+          }
         }
       }
     }
@@ -166,14 +159,15 @@ def _sync_from_v1_to_v2(wrapper_obj):
 }
 ```
 
-現時点では同名・同種要素だけを mapping できます。mapping がない要素は latest 側の定義をそのまま公開します。
-版間で意味が異なる変数だけ、mapping JSONで `versioned_value` または `versioned_reference` として明示してください。
+top-level kind は `import`, `function`, `variable`, `class` の4種類です。`import` は `imports` に分け、`function` / `variable` / `class` は `entities` に意味的対応として書きます。
 
-### 8. エントリポイント
+`state.sync = required` は、後続の状態同期対象であることを示します。状態同期は runtime が生成する proxy / wrapper の内側に閉じ込められる状態だけを対象にし、Python の通常の top-level name rebinding は追跡しません。
+
+### 7. エントリポイント
 
 main.py 経由で実行する場合、入力ディレクトリ直下に main.py が存在することを想定します。
 
-詳細な入力規約と mapping 例は `docs/versioned_modules.md`、未対応範囲の実装ロードマップは `docs/roadmap.md` を参照してください。
+詳細な入力規約と evolution 例は `docs/versioned_modules.md`、未対応範囲の実装ロードマップは `docs/roadmap.md` を参照してください。
 
 ## テスト
 

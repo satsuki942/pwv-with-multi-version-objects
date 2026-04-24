@@ -8,38 +8,37 @@
 - `module_name__2__.py`: version 2 のモジュール定義
 - 出力は `module_name.py`
 - version は整数
-- 1版以上を対象にする。1版だけの場合も、複数版対応済みの公開要素を持つモジュールとして出力される
-- 通常ファイルはそのままコピーされる。通常ファイル内のクラス名は、versioned module の判定には使わない
-- 通常ファイルから版付きモジュールを参照するときは、`foo__1__` / `foo__2__` ではなく、統合後の論理モジュール名 `foo` を import する
+- 通常ファイルはそのままコピーされる
+- 通常ファイルから版付きモジュールを参照するときは、統合後の論理モジュール名 `foo` を import する
 - `_mv_mapping/` はコンパイル用メタデータの専用ディレクトリであり、出力対象の通常ソースにはしない
 
-## mapping JSON
+## evolution JSON
 
-`_mv_mapping/modules.json` に `modules` キーを置くと、版付きモジュールの公開要素の対応関係として扱う。
+`_mv_mapping/evolution.json` を移行仕様の入力として扱う。`modules.json` はこの PoC では使わない。
 
 ```json
 {
   "modules": {
-    "foo": {
+    "sample": {
+      "versions": [1, 2],
       "imports": {
-        "1": [
-          "import os",
-          "from math import sqrt"
-        ],
-        "2": [
-          "from decimal import Decimal"
-        ]
+        "1": ["import os"],
+        "2": ["from math import sqrt"]
       },
-      "exports": {
-        "Point": {
-          "kind": "class"
+      "entities": {
+        "position": {
+          "state": {"sync": "required"},
+          "versions": {
+            "1": {"kind": "variable", "name": "x"},
+            "2": {"kind": "function", "name": "y"}
+          }
         },
-        "make_label": {
-          "kind": "function"
-        },
-        "THRESHOLD": {
-          "kind": "variable",
-          "binding": "versioned_value"
+        "point": {
+          "state": {"sync": "none"},
+          "versions": {
+            "1": {"kind": "class", "name": "Point"},
+            "2": {"kind": "class", "name": "PolarPoint"}
+          }
         }
       }
     }
@@ -47,36 +46,59 @@
 }
 ```
 
-現時点では同名・同種要素だけを mapping できる。mapping がない要素は、他の version に同名要素があっても latest 側の定義をそのまま公開する。
+`entities` の key は公開名ではなく、開発者が与える意味的 entity id である。各 entity は version ごとに `kind` と source `name` を持つ。`kind` は `function` / `variable` / `class` のいずれかである。`import` は top-level kind として扱うが、意味的 entity ではないため `imports` に分ける。
 
-`imports` は各 version が必要とする import 文の移行仕様である。コンパイラは versioned module のASTから import 文を収集せず、`modules.json` に書かれた import 文だけを出力する。`imports` がない module、または version key がない version は import なしとして扱う。
+## import
 
-出力される import 文は version 昇順、各 version 内の配列順で並ぶ。同じ import 文は1回だけ出力する。各文字列は単一の `import` または `from ... import ...` 文でなければならない。
+`imports` は version 昇順、各 version 内の配列順で重複なしに union する。各文字列は単一の `import` または `from ... import ...` 文でなければならない。
 
-## top-level 関数
+`evolution.json` がない module では、既存 fixture を動かすために source AST から同名 entity と import を推論する。この推論は PoC 用のフォールバックであり、研究仕様としては `evolution.json` に意味的対応を書く。
 
-top-level 関数 export は、公開関数ごとに現在 version を保持する。現在 version は生成された関数オブジェクトの `_mvo_current_version` 属性に保存されるため、同じモジュール内の複数関数は互いに独立して version を持つ。
+## アクセス対応
 
-呼び出し時はまず現在 version の関数実装が引数に対して呼び出し可能かを検査し、可能ならその version を呼ぶ。呼び出し不可の場合は version 昇順で呼び出し可能な実装を探し、見つかった version をその関数の現在 version として保存してから呼ぶ。
+公開 API の名前集合は、全 entity の `versions.*.name` から導出する。同じ entity が version ごとに別名・別 kind になってもよい。同じ公開名が version ごとに別 entity を指してもよい。
 
-## top-level 変数
+例:
 
-top-level 変数は値を作る構文ではなく名前束縛なので、デフォルトでは複数版対応しない。版間で意味が異なる変数だけ、ライブラリ開発者が明示的に `binding` を指定する。
+```json
+{
+  "entities": {
+    "position": {
+      "state": {"sync": "required"},
+      "versions": {
+        "1": {"kind": "variable", "name": "x"},
+        "2": {"kind": "variable", "name": "y"}
+      }
+    },
+    "count": {
+      "state": {"sync": "required"},
+      "versions": {
+        "1": {"kind": "variable", "name": "z"},
+        "2": {"kind": "variable", "name": "x"}
+      }
+    }
+  }
+}
+```
 
-- `plain`: latest 側の値をそのまま公開する
-- `versioned_value`: `VersionedValue` proxy で包み、演算や属性アクセスをその変数オブジェクト自身が選ぶ現在版の値へ委譲する
-- `versioned_reference`: すでにMVO wrapperなど版管理を持つ値への参照として扱い、二重には包まない
+この場合、公開名 `x` は v1 では `position`、v2 では `count` を指す。状態同期で見るべき対応は公開名 `x` ではなく、`position` と `count` の entity 内対応である。
 
-`VersionedValue` は `get()`, `set(new_value)` を持つ。値を読むたびに、その値がどこから参照されたかではなく、対象 `VersionedValue` オブジェクト自身の strategy と現在 version に従って実体値を決定する。関数やメソッドの実装 version は、そこで参照される `VersionedValue` の version を固定しない。加えて、基本的な演算・属性アクセス・添字アクセスは内部の現在版の値へ委譲する。ただし、`type(X) is int` のような完全な型透過性は保証しない。
+## 版決定
 
-`versioned_value` として公開した名前は、`X = ...` のように再束縛されないことを前提とする。値を差し替える必要がある場合は `X.set(new_value)` を使う。コンパイル対象モジュール内の `global X; X = ...` や、コンパイル外コードからの `X = ...` は現在追跡しない。
+関数 facade は関数オブジェクトごとに現在 version を持つ。クラス wrapper は object ごとに現在 version を持つ。変数 proxy は proxy ごとに現在 version を持つ。
 
-## 関数・メソッド dispatch
+アクセス時はまず現在 version の候補を試す。現在 version がその操作に対応できない場合、操作可能な候補のうち latest version を選び、現在 version を更新する。関数・メソッドの呼び出し可能判定は `inspect.signature(...).bind(...)` の成否で決める。
 
-関数・メソッド dispatch の呼び出し可能判定は、生成後の実体関数に対する `inspect.signature(...).bind(...)` の成否で決める。つまり、`*args` / `**kwargs` / keyword-only / positional-only を含む Python の通常の関数呼び出し binding に従い、binding できない候補は呼び出さない。
+## 状態同期制約
+
+`state.sync` は `none` または `required` である。省略時は `none` とみなす。
+
+状態同期は、状態を runtime が生成する proxy / wrapper の内側に閉じ込められる場合だけ扱う。Python の通常の top-level name rebinding は追跡しない。primitive / immutable value の更新は、生成された proxy API 経由で行う必要がある。
+
+`identity` は入力仕様には書かせない。compiler/runtime が kind 構成から binding proxy、instance wrapper、または access facade を推論する。
 
 ## 未対応範囲
 
-現在の主な未対応範囲は、異名 export mapping、種類が異なる要素同士の mapping、変数再束縛の検出・診断、クラス構文の拡張、複雑な状態同期、import 取り扱いの改善である。
+現在の主な未対応範囲は、同期関数と `state.sync = required` の接続、属性単位の対応、proxy を迂回する参照の診断、クラス構文の拡張、package 内 module key の厳密化である。
 
 実装ロードマップは [未対応範囲ロードマップ](roadmap.md) を参照する。

@@ -13,11 +13,74 @@ from ..elements.variable.compiler import (
     collect_versioned_value_names,
 )
 
+_MVO_ACCESS_RUNTIME = """
+class MVOAccess:
+    def __init__(self, candidates, strategy='continuity'):
+        object.__setattr__(self, '_candidates', {int(k): v for k, v in candidates.items()})
+        object.__setattr__(self, '_strategy', strategy)
+        current_version = max(self._candidates.keys()) if strategy == 'latest' else min(self._candidates.keys())
+        object.__setattr__(self, '_current_version', current_version)
+
+    def _candidate(self, version):
+        return self._candidates[int(version)]
+
+    def _candidate_value(self, version):
+        candidate = self._candidate(version)
+        return candidate['value']
+
+    def _versions_latest_first(self):
+        return sorted(self._candidates.keys(), reverse=True)
+
+    def _resolve_read_version(self):
+        if self._current_version in self._candidates:
+            return self._current_version
+        return self._versions_latest_first()[0]
+
+    def _resolve_call_version(self, args, kwargs):
+        current = self._current_version
+        if current in self._candidates and callable(self._candidate_value(current)):
+            return current
+        for version in self._versions_latest_first():
+            if callable(self._candidate_value(version)):
+                object.__setattr__(self, '_current_version', version)
+                return version
+        raise TypeError('No version of this access is callable.')
+
+    def get(self):
+        return self._candidate_value(self._resolve_read_version())
+
+    def set(self, new_value):
+        version = self._resolve_read_version()
+        self._candidate(version)['value'] = new_value
+        return new_value
+
+    def __call__(self, *args, **kwargs):
+        return self._candidate_value(self._resolve_call_version(args, kwargs))(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.get(), name)
+
+    def __setattr__(self, name, value):
+        if name.startswith('_'):
+            object.__setattr__(self, name, value)
+        else:
+            setattr(self.get(), name, value)
+
+    def __bool__(self):
+        return bool(self.get())
+
+    def __str__(self):
+        return str(self.get())
+
+    def __repr__(self):
+        return repr(self.get())
+"""
+
 
 def transform_versioned_module(
     logical_rel_path: Path,
     versioned_trees: dict[int, ast.AST],
-    module_mapping: dict | None,
+    evolution_spec: dict | None,
     sync_functions_dict: dict,
     incompatibilities: dict | None,
     version_selection_strategy: str = DEFAULT_VERSION_SELECTION_STRATEGY,
@@ -28,18 +91,20 @@ def transform_versioned_module(
         logger.error_log(f"Versioned module has no versions: {logical_rel_path}")
         return logical_rel_path, None
 
-    exports = (module_mapping or {}).get("exports", {})
+    evolution_spec = evolution_spec or {}
     latest_version = versions[-1]
     latest_tree = versioned_trees[latest_version]
     top_level_by_version = {
         version: _collect_top_level_defs(tree)
         for version, tree in versioned_trees.items()
     }
-    inferred_exports = _normalize_exports(exports, top_level_by_version, versions)
+    normalized = _normalize_evolution_spec(evolution_spec, top_level_by_version, versions)
+    inferred_exports = normalized["legacy_exports"]
+    access_facades = normalized["access_facades"]
     versioned_value_names = collect_versioned_value_names(inferred_exports)
 
     new_body: list[ast.AST] = []
-    import_nodes = _copy_declared_imports(module_mapping, versions)
+    import_nodes = _copy_declared_imports(evolution_spec, versions)
     import_nodes.extend(_copy_sync_imports(inferred_exports, sync_functions_dict))
     new_body.extend(_dedupe_imports(import_nodes))
 
@@ -54,6 +119,8 @@ def transform_versioned_module(
     if class_exports or function_exports:
         new_body.extend(build_signature_runtime_support())
     new_body.extend(build_module_runtime(version_selection_strategy, latest_version))
+    if access_facades:
+        new_body.extend(ast.parse(_MVO_ACCESS_RUNTIME).body)
 
     if class_exports:
         new_body.extend(build_unified_classes_for_module(
@@ -89,7 +156,18 @@ def transform_versioned_module(
             if variable_node:
                 new_body.append(variable_node)
 
-    new_body.extend(_copy_unmapped_latest_defs(latest_tree, set(inferred_exports)))
+    for public_name, entries in access_facades.items():
+        new_body.extend(_build_access_facade(
+            public_name,
+            entries,
+            top_level_by_version,
+            version_selection_strategy,
+        ))
+
+    mapped_names = set(inferred_exports) | set(access_facades)
+    for entries in access_facades.values():
+        mapped_names.update(entry["name"] for entry in entries)
+    new_body.extend(_copy_unmapped_latest_defs(latest_tree, mapped_names))
 
     new_module = ast.Module(body=new_body, type_ignores=[])
     ast.fix_missing_locations(new_module)
@@ -110,8 +188,8 @@ def _collect_top_level_defs(tree: ast.AST) -> dict[str, ast.AST]:
     return defs
 
 
-def _copy_declared_imports(module_mapping: dict | None, versions: list[int]) -> list[ast.AST]:
-    imports_by_version = (module_mapping or {}).get("imports", {})
+def _copy_declared_imports(evolution_spec: dict | None, versions: list[int]) -> list[ast.AST]:
+    imports_by_version = (evolution_spec or {}).get("imports", {})
     if imports_by_version is None:
         imports_by_version = {}
     if not isinstance(imports_by_version, dict):
@@ -169,23 +247,152 @@ def _normalize_exports(
             raise ValueError(f"Invalid export kind for {export_name}: {kind}")
 
         specified_versions = spec.get("versions")
-        if specified_versions is not None:
-            for version, source_name in specified_versions.items():
-                if source_name != export_name:
-                    raise ValueError(
-                        "Only same-name export mappings are supported for now: "
-                        f"{export_name} v{version} -> {source_name}"
-                    )
-        spec["versions"] = {str(version): export_name for version in versions}
+        if specified_versions is None:
+            specified_versions = {str(version): export_name for version in versions}
+        spec["versions"] = {str(version): specified_versions.get(str(version), export_name) for version in versions}
         if kind == "variable":
             spec.setdefault("binding", "plain")
 
         for version in versions:
             node = top_level_by_version[version].get(export_name)
+            source_name = spec["versions"][str(version)]
+            node = top_level_by_version[version].get(source_name)
             if not _matches_kind(node, kind):
-                raise ValueError(f"Export {export_name} ({kind}) is missing or mismatched in v{version}")
+                raise ValueError(f"Export {export_name} ({kind}) is missing or mismatched in v{version}: {source_name}")
         out[export_name] = spec
     return out
+
+
+def _normalize_evolution_spec(
+    evolution_spec: dict,
+    top_level_by_version: dict[int, dict[str, ast.AST]],
+    versions: list[int],
+) -> dict:
+    entities = evolution_spec.get("entities", {})
+    if not isinstance(entities, dict):
+        raise ValueError("Evolution spec entities must be an object")
+
+    entity_entries: dict[str, list[dict]] = {}
+    public_name_entities: dict[str, set[str]] = {}
+    for entity_id, entity_spec in entities.items():
+        entity_versions = entity_spec.get("versions", {})
+        state_sync = (entity_spec.get("state") or {}).get("sync", "none")
+        if not isinstance(entity_versions, dict):
+            raise ValueError(f"Entity versions must be an object: {entity_id}")
+        for raw_version, entry in entity_versions.items():
+            version = int(raw_version)
+            if version not in top_level_by_version:
+                raise ValueError(f"Unknown version in entity {entity_id}: {version}")
+            kind = entry.get("kind")
+            name = entry.get("name")
+            if kind not in {"function", "variable", "class"}:
+                raise ValueError(f"Invalid kind in entity {entity_id} v{version}: {kind}")
+            if not isinstance(name, str):
+                raise ValueError(f"Invalid name in entity {entity_id} v{version}: {name}")
+            node = top_level_by_version[version].get(name)
+            if not _matches_kind(node, kind):
+                raise ValueError(f"Entity {entity_id} ({kind}) is missing or mismatched in v{version}: {name}")
+            normalized_entry = {
+                "entity_id": entity_id,
+                "state_sync": state_sync,
+                "version": version,
+                "kind": kind,
+                "name": name,
+            }
+            entity_entries.setdefault(entity_id, []).append(normalized_entry)
+            public_name_entities.setdefault(name, set()).add(entity_id)
+
+    public_to_entries: dict[str, list[dict]] = {}
+    for entity_id, entries in entity_entries.items():
+        names = {entry["name"] for entry in entries}
+        for public_name in names:
+            if len(public_name_entities[public_name]) == 1:
+                public_to_entries.setdefault(public_name, []).extend(copy.deepcopy(entries))
+            else:
+                public_to_entries.setdefault(public_name, []).extend(
+                    copy.deepcopy(entry) for entry in entries if entry["name"] == public_name
+                )
+
+    legacy_exports: dict[str, dict] = {}
+    access_facades: dict[str, list[dict]] = {}
+    for public_name, entries in public_to_entries.items():
+        kinds = {entry["kind"] for entry in entries}
+        entities_for_name = {entry["entity_id"] for entry in entries}
+        if len(kinds) == 1 and len(entities_for_name) == 1:
+            kind = entries[0]["kind"]
+            version_map = {str(entry["version"]): entry["name"] for entry in entries}
+            legacy_exports[public_name] = {
+                "kind": kind,
+                "versions": version_map,
+            }
+            if kind == "variable":
+                legacy_exports[public_name]["binding"] = "versioned_value"
+        else:
+            access_facades[public_name] = entries
+
+    return {
+        "legacy_exports": _normalize_exports(legacy_exports, top_level_by_version, versions),
+        "access_facades": access_facades,
+    }
+
+
+def _build_access_facade(
+    public_name: str,
+    entries: list[dict],
+    top_level_by_version: dict[int, dict[str, ast.AST]],
+    version_selection_strategy: str,
+) -> list[ast.AST]:
+    out: list[ast.AST] = []
+    candidates: list[tuple[int, ast.AST]] = []
+    for entry in sorted(entries, key=lambda item: item["version"]):
+        version = entry["version"]
+        source_name = entry["name"]
+        node = top_level_by_version[version][source_name]
+        impl_name = f"_mvo_{public_name}_v{version}_{source_name}"
+        if entry["kind"] == "function":
+            func_copy = copy.deepcopy(node)
+            func_copy.name = impl_name
+            out.append(func_copy)
+            value = ast.Name(id=impl_name, ctx=ast.Load())
+        elif entry["kind"] == "class":
+            class_copy = copy.deepcopy(node)
+            class_copy.name = impl_name
+            out.append(class_copy)
+            value = ast.Name(id=impl_name, ctx=ast.Load())
+        else:
+            value = _extract_assignment_value(node)
+            if value is None:
+                continue
+        candidates.append((version, value))
+
+    out.append(ast.Assign(
+        targets=[ast.Name(id=public_name, ctx=ast.Store())],
+        value=ast.Call(
+            func=ast.Name(id="MVOAccess", ctx=ast.Load()),
+            args=[
+                ast.Dict(
+                    keys=[ast.Constant(value=version) for version, _ in candidates],
+                    values=[
+                        ast.Dict(
+                            keys=[ast.Constant(value="value")],
+                            values=[value],
+                        )
+                        for _, value in candidates
+                    ],
+                )
+            ],
+            keywords=[ast.keyword(arg="strategy", value=ast.Constant(value=version_selection_strategy))],
+        ),
+    ))
+    return out
+
+
+def _extract_assignment_value(node: ast.AST | None) -> ast.AST | None:
+    if isinstance(node, ast.Assign):
+        return copy.deepcopy(node.value)
+    if isinstance(node, ast.AnnAssign):
+        return copy.deepcopy(node.value)
+    return None
 
 
 def _matches_kind(node: ast.AST | None, kind: str) -> bool:

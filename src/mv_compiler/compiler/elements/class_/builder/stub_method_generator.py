@@ -140,9 +140,8 @@ def _generate_consistent_signature_stub(
     overloads = class_info.methods.get(method_name, [])
     callable_versions = sorted([int(info.version) for info in overloads])
 
-    # 現状はソート済みの先頭バージョンを使用
     if callable_versions:
-        next_version_to_try = callable_versions[0]
+        next_version_to_try = callable_versions[-1]
     else:
         return None
 

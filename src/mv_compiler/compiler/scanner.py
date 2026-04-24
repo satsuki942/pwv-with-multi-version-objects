@@ -9,7 +9,7 @@ from .common.util.constants import (
     PROJECT_INCOMPATIBILITIES_KEY,
     PROJECT_NORMAL_FILES_KEY,
     PROJECT_VERSIONED_MODULES_KEY,
-    PROJECT_MODULE_MAPPINGS_KEY,
+    PROJECT_EVOLUTION_SPECS_KEY,
 )
 from .versioning import parse_sync_module_filename, parse_versioned_module_filename
 
@@ -24,7 +24,7 @@ def create_project_structure(input_dir: Path) -> Dict:
         PROJECT_INCOMPATIBILITIES_KEY: {},
         PROJECT_NORMAL_FILES_KEY: [],
         PROJECT_VERSIONED_MODULES_KEY: {},
-        PROJECT_MODULE_MAPPINGS_KEY: {},
+        PROJECT_EVOLUTION_SPECS_KEY: {},
     }
 
     mapping_dir = input_dir / "_mv_mapping"
@@ -40,10 +40,10 @@ def create_project_structure(input_dir: Path) -> Dict:
         else:
             source_files.append(file_path)
     sync_files = list(mapping_dir.glob("**/*_sync.py")) if mapping_dir.exists() else []
-    mapping_file = mapping_dir / "modules.json"
+    evolution_file = mapping_dir / "evolution.json"
     incompatibilities_files = [
         path for path in mapping_dir.glob("**/*.json")
-        if path.name != "modules.json"
+        if path.name not in {"evolution.json", "modules.json"}
     ] if mapping_dir.exists() else []
 
     
@@ -69,16 +69,16 @@ def create_project_structure(input_dir: Path) -> Dict:
         except Exception as e:
             logger.error_log(f"Failed to parse {state_transformation_file}: {e}")
 
-    # --- module mapping ---
-    if mapping_file.exists():
+    # --- evolution specification ---
+    if evolution_file.exists():
         try:
-            json_data = json.loads(mapping_file.read_text(encoding="utf-8"))
+            json_data = json.loads(evolution_file.read_text(encoding="utf-8"))
             if isinstance(json_data, dict) and isinstance(json_data.get("modules"), dict):
-                project_structure[PROJECT_MODULE_MAPPINGS_KEY].update(json_data["modules"])
+                project_structure[PROJECT_EVOLUTION_SPECS_KEY].update(json_data["modules"])
             else:
-                logger.error_log(f"Invalid module mapping schema: {mapping_file}")
+                logger.error_log(f"Invalid evolution schema: {evolution_file}")
         except Exception as e:
-            logger.error_log(f"Failed to parse {mapping_file}: {e}")
+            logger.error_log(f"Failed to parse {evolution_file}: {e}")
 
     # --- 互換性定義ファイル ---
     for incompatibilities_file in incompatibilities_files:
@@ -90,6 +90,7 @@ def create_project_structure(input_dir: Path) -> Dict:
         except Exception as e:
             logger.error_log(f"Failed to parse {incompatibilities_file}: {e}")
 
+    _infer_missing_evolution_specs(project_structure)
     return project_structure
 
 
@@ -174,3 +175,68 @@ def _parse_incompatibility_data(file_path: Path, data: dict) -> Optional[Dict[st
             out[base_name][ver] = set(attrs)
 
     return out
+
+
+def _infer_missing_evolution_specs(project_structure: Dict) -> None:
+    """Create a small same-name evolution spec when no explicit spec exists.
+
+    This keeps old source fixtures usable without reading modules.json.
+    """
+    for rel_path, versioned_trees in project_structure[PROJECT_VERSIONED_MODULES_KEY].items():
+        module_key = rel_path.with_suffix("").as_posix()
+        if module_key in project_structure[PROJECT_EVOLUTION_SPECS_KEY]:
+            continue
+
+        versions = sorted(versioned_trees)
+        by_version = {
+            version: _collect_top_level_kinds(tree)
+            for version, tree in versioned_trees.items()
+        }
+        names = sorted({name for defs in by_version.values() for name in defs})
+        entities = {}
+        for name in names:
+            entries = {}
+            kinds = set()
+            for version in versions:
+                kind = by_version[version].get(name)
+                if kind is None:
+                    continue
+                kinds.add(kind)
+                entries[str(version)] = {"kind": kind, "name": name}
+            if entries and len(kinds) == 1:
+                entities[name] = {
+                    "state": {"sync": "none"},
+                    "versions": entries,
+                }
+
+        imports = {}
+        for version, tree in versioned_trees.items():
+            import_sources = [
+                ast.unparse(node)
+                for node in tree.body
+                if isinstance(node, (ast.Import, ast.ImportFrom))
+            ]
+            if import_sources:
+                imports[str(version)] = import_sources
+
+        project_structure[PROJECT_EVOLUTION_SPECS_KEY][module_key] = {
+            "versions": versions,
+            "imports": imports,
+            "entities": entities,
+        }
+
+
+def _collect_top_level_kinds(tree: ast.AST) -> Dict[str, str]:
+    defs: Dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            defs[node.name] = "class"
+        elif isinstance(node, ast.FunctionDef):
+            defs[node.name] = "function"
+        elif isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    defs[target.id] = "variable"
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            defs[node.target.id] = "variable"
+    return defs

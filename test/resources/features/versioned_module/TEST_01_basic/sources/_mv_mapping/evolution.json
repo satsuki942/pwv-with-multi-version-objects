@@ -1,0 +1,55 @@
+{
+  "modules": {
+    "sample": {
+      "versions": [1, 2],
+      "imports": {},
+      "entities": {
+        "threshold": {
+          "state": {
+            "sync": "none"
+          },
+          "versions": {
+            "1": {
+              "kind": "variable",
+              "name": "THRESHOLD"
+            },
+            "2": {
+              "kind": "variable",
+              "name": "THRESHOLD"
+            }
+          }
+        },
+        "point": {
+          "state": {
+            "sync": "none"
+          },
+          "versions": {
+            "1": {
+              "kind": "class",
+              "name": "Point"
+            },
+            "2": {
+              "kind": "class",
+              "name": "Point"
+            }
+          }
+        },
+        "label": {
+          "state": {
+            "sync": "none"
+          },
+          "versions": {
+            "1": {
+              "kind": "function",
+              "name": "label"
+            },
+            "2": {
+              "kind": "function",
+              "name": "label"
+            }
+          }
+        }
+      }
+    }
+  }
+}

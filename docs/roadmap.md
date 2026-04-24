@@ -8,23 +8,39 @@
 
 ## 優先順位
 
-### 1. export mapping の拡張 [重要度: 高]
+### 1. state.sync と同期関数の接続 [重要度: 高]
 
-目的: 版ごとに名前や形が変わった公開要素を、同じ論理 API として扱えるようにする。
+目的: `evolution.json` の semantic entity と、版間の状態変換関数を接続する。
 
 現状制約:
 
-- `modules.json` の export mapping は同名・同種要素だけを扱う。
-- `versions` に異なる source name を書いても、現在は `ValueError` になる。
-- `class` / `function` / `variable` など種類が異なる要素同士の対応付けはできない。
+- `state.sync = required` は内部 IR に残せるが、同期関数の呼び出し条件にはまだ接続していない。
+- 同期対象は proxy / wrapper 内に閉じ込められる状態に限定している。
+- top-level name rebinding は追跡しない。
 
 完了条件の概要:
 
-- version ごとに異なる source name を指定できる。
-- 異名 mapping の dispatch / wrapper 生成が既存の同名 mapping と同じ公開名で動作する。
-- 種類変更を許す場合は、許可する組み合わせと生成結果の意味を仕様化する。
+- semantic entity id と sync 関数の対応規約を決める。
+- access facade / VersionedValue / class wrapper の version 切替点に同期 hook を置く。
+- 同期関数がない `required` entity の失敗時挙動を仕様化する。
 
-### 2. クラス対応範囲の拡張 [重要度: 高]
+### 2. 属性単位のアクセス対応 [重要度: 高]
+
+目的: class instance の field / property 名変更を semantic entity と同じ考え方で扱う。
+
+現状制約:
+
+- 現在の access correspondence は top-level entity が中心である。
+- 属性名変更は古い incompatibility JSON ベースの暫定 `__getattr__` / `__setattr__` に依存している。
+- 属性の read/write converter と state sync の境界が未整理である。
+
+完了条件の概要:
+
+- `evolution.json` に属性対応を追加するか、別の state spec に分けるかを決める。
+- wrapper 経由の attribute read/write で version 決定と converter を呼べるようにする。
+- proxy / wrapper を迂回する属性参照の扱いを明記する。
+
+### 3. クラス対応範囲の拡張 [重要度: 高]
 
 目的: より広い Python クラス構文を複数版クラスとして扱えるようにする。
 
@@ -40,22 +56,6 @@
 - クラス属性を版ごとの値または latest 側の定義として扱う方針を決め、実装に反映する。
 - 内部クラスを非対応のままにする場合は明確に検出する。対応する場合は名前解決と出力形を仕様化する。
 - 代表的な decorator / property / classmethod / staticmethod の扱いをテストで固定する。
-
-### 3. import / package 取り扱いの改善 [重要度: 高]
-
-目的: 複数版モジュール内の import をより少ない手書き設定で扱い、package 構成での利用を安定させる。
-
-現状制約:
-
-- versioned module の AST から import 文を自動収集せず、`modules.json` の `imports` だけを出力する。
-- `imports` の各要素は単一の `import` または `from ... import ...` 文でなければならない。
-- 相対 import、package 内 import、通常ファイルからの参照規約は利用者側の記述に依存する部分が大きい。
-
-完了条件の概要:
-
-- import 自動収集を導入するか、手書き `imports` を維持するかを決める。
-- package 配下の論理 module key と import 解決の規則を明確化する。
-- version ごとの import 差分、重複排除、順序の仕様をテストで固定する。
 
 ### 4. 変数再束縛の検出・診断 [重要度: 低]
 
@@ -74,21 +74,21 @@
 - コンパイル外コードからの再束縛は非対応として仕様に明記する。
 - `X.set(new_value)` による明示的な値差し替えが、strategy と現在 version の規則に従って読み出されることをテストで確認する。
 
-### 5. sync / incompatibility の高度化 [重要度: 低]
+### 5. import / package 取り扱いの改善 [重要度: 低]
 
-目的: 版間の状態変換と属性互換性定義を、複雑なオブジェクト状態にも適用できるようにする。
+目的: package 構成での `evolution.json` module key と import 解決を安定させる。
 
 現状制約:
 
-- sync module は `<BaseName>_sync.py` と `_?sync_from_v<from>_to_v<to>` 形式に依存する。
-- sync 関数は wrapper オブジェクトを 1 つ受け取る前提で、複雑な変数間同期の仕様はない。
-- incompatibility JSON は属性名リストを中心にした単純な定義で、検証や失敗時の扱いは限定的。
+- `imports` の各要素は単一の `import` または `from ... import ...` 文でなければならない。
+- 相対 import、package 内 import、通常ファイルからの参照規約は利用者側の記述に依存する部分が大きい。
+- `evolution.json` がない場合の AST 推論は PoC 用フォールバックである。
 
 完了条件の概要:
 
-- sync 関数の検出、引数、戻り値、失敗時の扱いを仕様化する。
-- 複数属性や複数オブジェクトにまたがる同期を扱う場合の入力形式を決める。
-- 不正な sync / incompatibility 定義を利用者が理解できるエラーとして報告する。
+- package 配下の論理 module key と import 解決の規則を明確化する。
+- version ごとの import 差分、重複排除、順序の仕様をテストで固定する。
+- 推論フォールバックを維持するか、明示 spec 必須にするかを決める。
 
 ## 運用方針
 
