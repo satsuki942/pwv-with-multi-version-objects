@@ -1,15 +1,29 @@
 {
   "modules": {
     "models/location": {
+      "module_path": "models/location",
+      "versions": [
+        1,
+        2
+      ],
       "imports": {
-        "1": ["from .point import Point"],
-        "2": ["from .point import Point"]
+        "1": [
+          "from .point import Point"
+        ],
+        "2": [
+          "from .point import Point"
+        ]
       },
-      "exports": {
-        "Location": {
-          "kind": "class"
+      "entity_mappings": [
+        {
+          "entity_key": "Location",
+          "kind": "class",
+          "source_names": {
+            "1": "Location",
+            "2": "Location"
+          }
         }
-      }
+      ]
     }
   }
 }

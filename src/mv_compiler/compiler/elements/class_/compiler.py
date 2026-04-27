@@ -19,7 +19,7 @@ def build_unified_classes_for_module(
     synthetic_body: list[ast.AST] = []
     for export_name, spec in class_exports.items():
         for version in versions:
-            source_name = spec.get("versions", {}).get(str(version), export_name)
+            source_name = spec.get("source_names", {}).get(str(version), export_name)
             class_node = top_level_by_version[version].get(source_name)
             if not isinstance(class_node, ast.ClassDef):
                 logger.error_log(f"Class export not found: {export_name} v{version}")
@@ -34,7 +34,7 @@ def build_unified_classes_for_module(
 
     out: list[ast.ClassDef] = []
     for export_name, spec in class_exports.items():
-        mapping_key = spec.get("key", export_name)
+        mapping_key = spec.get("sync_key", export_name)
         state_sync_components = sync_functions_dict.get(mapping_key, ([], []))
         incompatibility = incompatibilities.get(mapping_key) if incompatibilities else None
         out.append(build_unified_class(

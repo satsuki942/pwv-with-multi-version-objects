@@ -1,12 +1,22 @@
 {
   "modules": {
     "sample": {
-      "exports": {
-        "VALUE": {
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "VALUE",
           "kind": "variable",
-          "binding": "versioned_value"
+          "versioned_by": "generated",
+          "source_names": {
+            "1": "VALUE",
+            "2": "VALUE"
+          }
         }
-      }
+      ]
     }
   }
 }

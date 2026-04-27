@@ -20,6 +20,7 @@ def test_transpilation_and_execution(input_dir: Path):
     The "input_dir" argument is dynamically provided by conftest.py.
     """
     # --- 1. Arrange ---
+    # TEST_* ディレクトリを1ケースとして扱い、入力・出力・期待値・追加設定を集める。
     case_dir = input_dir
     input_dir = case_dir / "sources"
     output_dir = case_dir / COMPILED_DIR_NAME
@@ -33,6 +34,8 @@ def test_transpilation_and_execution(input_dir: Path):
     _prepare_output_dir(output_dir)
 
     # --- 2. Act ---
+    # まずコンパイルする。test.json に expect_compile_error があるケースは、
+    # ここで期待したエラー文字列を含む例外が出ればテスト成功として終了する。
     try:
         compile_kwargs = {}
         if strategy := config.get("version_selection_strategy"):
@@ -50,11 +53,13 @@ def test_transpilation_and_execution(input_dir: Path):
             return
         raise
 
+    # エラーを期待していたのにコンパイルが通った場合は、明示的に失敗させる。
     if expected_error := config.get("expect_compile_error"):
         metadata["completed_at"] = _now()
         _write_metadata(output_dir, metadata)
         raise AssertionError(f"Expected compile error containing {expected_error!r}, but compilation succeeded.")
 
+    # コンパイル成功が期待される通常ケースだけ、生成された main.py を実行する。
     try:
         actual_output = execute("main.py", output_dir)
         metadata["execute"] = {"success": True}
@@ -69,6 +74,7 @@ def test_transpilation_and_execution(input_dir: Path):
     _write_metadata(output_dir, metadata)
 
     # --- 3. Assert ---
+    # 標準出力を期待値と比較する。改行コード差はテスト結果に影響させない。
     assert expected_output.strip().replace('\r\n', '\n') == actual_output.strip().replace('\r\n', '\n'), "Runtime output does not match expected output."
 
 def _load_test_config(case_dir: Path) -> dict:

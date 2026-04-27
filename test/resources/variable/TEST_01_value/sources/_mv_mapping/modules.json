@@ -1,16 +1,31 @@
 {
   "modules": {
     "sample": {
-      "exports": {
-        "LEFT": {
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "LEFT",
           "kind": "variable",
-          "binding": "versioned_value"
+          "versioned_by": "generated",
+          "source_names": {
+            "1": "LEFT",
+            "2": "LEFT"
+          }
         },
-        "RIGHT": {
+        {
+          "entity_key": "RIGHT",
           "kind": "variable",
-          "binding": "versioned_value"
+          "versioned_by": "generated",
+          "source_names": {
+            "1": "RIGHT",
+            "2": "RIGHT"
+          }
         }
-      }
+      ]
     }
   }
 }

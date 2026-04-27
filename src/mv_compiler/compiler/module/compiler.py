@@ -28,27 +28,27 @@ def transform_versioned_module(
         logger.error_log(f"Versioned module has no versions: {logical_rel_path}")
         return logical_rel_path, None
 
-    exports = (module_mapping or {}).get("exports", {})
+    entity_mappings = (module_mapping or {}).get("entity_mappings", [])
     latest_version = versions[-1]
     latest_tree = versioned_trees[latest_version]
     top_level_by_version = {
         version: _collect_top_level_defs(tree)
         for version, tree in versioned_trees.items()
     }
-    inferred_exports = _normalize_exports(exports, top_level_by_version, versions)
-    versioned_value_names = collect_versioned_value_names(inferred_exports)
+    inferred_entities = _normalize_entity_mappings(entity_mappings, top_level_by_version, versions)
+    versioned_value_names = collect_versioned_value_names(inferred_entities)
 
     new_body: list[ast.AST] = []
     import_nodes = _copy_declared_imports(module_mapping, versions)
-    import_nodes.extend(_copy_sync_imports(inferred_exports, sync_functions_dict))
+    import_nodes.extend(_copy_sync_imports(inferred_entities, sync_functions_dict))
     new_body.extend(_dedupe_imports(import_nodes))
 
     class_exports = {
-        name: spec for name, spec in inferred_exports.items()
+        name: spec for name, spec in inferred_entities.items()
         if spec.get("kind") == "class"
     }
     function_exports = {
-        name: spec for name, spec in inferred_exports.items()
+        name: spec for name, spec in inferred_entities.items()
         if spec.get("kind") == "function"
     }
     if class_exports or function_exports:
@@ -66,7 +66,7 @@ def transform_versioned_module(
             version_selection_strategy,
         ))
 
-    for export_name, spec in inferred_exports.items():
+    for export_name, spec in inferred_entities.items():
         kind = spec.get("kind")
         if kind == "function":
             new_body.extend(build_function_export(
@@ -89,8 +89,8 @@ def transform_versioned_module(
             if variable_node:
                 new_body.append(variable_node)
 
-    new_body.extend(_build_alias_assignments(inferred_exports))
-    new_body.extend(_copy_unmapped_latest_defs(latest_tree, _mapped_output_names(inferred_exports, latest_version)))
+    new_body.extend(_build_alias_assignments(inferred_entities))
+    new_body.extend(_copy_unmapped_latest_defs(latest_tree, _mapped_output_names(inferred_entities, latest_version)))
 
     new_module = ast.Module(body=new_body, type_ignores=[])
     ast.fix_missing_locations(new_module)
@@ -144,7 +144,7 @@ def _copy_sync_imports(exports: dict, sync_functions_dict: dict) -> list[ast.AST
     for export_name, spec in exports.items():
         if spec.get("kind") != "class":
             continue
-        sync_key = spec.get("key", export_name)
+        sync_key = spec.get("sync_key", export_name)
         sync_imports, _ = sync_functions_dict.get(sync_key, ([], []))
         for import_node in sync_imports:
             imports.append(copy.deepcopy(import_node))
@@ -158,35 +158,54 @@ def _dedupe_imports(import_nodes: list[ast.AST]) -> list[ast.AST]:
     return list(imports.values())
 
 
-def _normalize_exports(
-    explicit_exports: dict | list,
+def _normalize_entity_mappings(
+    entity_mappings: list,
     top_level_by_version: dict[int, dict[str, ast.AST]],
     versions: list[int],
 ) -> dict:
+    if not isinstance(entity_mappings, list):
+        raise ValueError("Module entity_mappings must be an array")
+
     out: dict = {}
     used_public_names: set[str] = set()
+    used_entity_keys: set[str] = set()
     used_sources_by_version: dict[int, set[str]] = {version: set() for version in versions}
-    for export_name, raw_spec in _iter_export_specs(explicit_exports, versions):
+    for raw_spec in entity_mappings:
+        if not isinstance(raw_spec, dict):
+            raise ValueError("Module entity_mappings array items must be objects")
         spec = copy.deepcopy(raw_spec)
         kind = spec.get("kind")
         if kind not in {"class", "function", "variable"}:
-            raise ValueError(f"Invalid export kind for {export_name}: {kind}")
-
-        # public な旧名/新名とは別に、key は sync 探索と隠し実体名の基準として保持する。
-        source_names = _normalize_export_versions(export_name, spec, versions)
-        spec["versions"] = source_names
+            raise ValueError(f"Invalid entity kind: {kind}")
         if kind == "variable":
-            spec.setdefault("binding", "plain")
+            versioned_by = spec.get("versioned_by")
+            if versioned_by not in {"generated", "referenced"}:
+                raise ValueError("Variable entity versioned_by must be 'generated' or 'referenced'")
+        elif "versioned_by" in spec:
+            raise ValueError("versioned_by is only valid for variable entities")
 
-        # 異名 mapping は隠し実体へ統合し、各版の source name だけを alias として公開する。
-        aliases = _build_alias_names(export_name, source_names)
-        if _uses_entity_alias(export_name, aliases):
-            spec["key"] = export_name
-            spec["entity_name"] = f"_{export_name}_Entity"
+        # entity_mappings は外部仕様なので、生成処理が使いやすい内部specへ正規化する。
+        source_names = _normalize_source_names(spec, versions)
+        entity_key = spec.get("entity_key")
+        if entity_key is None:
+            entity_key = _default_entity_key(source_names, versions)
+        if not isinstance(entity_key, str) or not entity_key:
+            raise ValueError("Entity entity_key must be a non-empty string")
+        if entity_key in used_entity_keys:
+            raise ValueError(f"Duplicate entity_key: {entity_key}")
+        used_entity_keys.add(entity_key)
+        spec["source_names"] = source_names
+        spec["sync_key"] = entity_key
+
+        # 異名 mapping は実体と公開aliasを分ける。referenced変数だけはkey名にlatest右辺を束縛する。
+        aliases = _build_alias_names(source_names)
+        if _uses_entity_alias(entity_key, aliases):
+            spec["entity_key"] = entity_key
+            spec["entity_name"] = entity_key if spec.get("versioned_by") == "referenced" else f"_{entity_key}_Entity"
             spec["aliases"] = aliases
         else:
-            spec["key"] = export_name
-            spec["entity_name"] = export_name
+            spec["entity_key"] = entity_key
+            spec["entity_name"] = entity_key
             spec["aliases"] = []
 
         # 同じ公開名を複数 entity から出すと、版選択では解決できない曖昧さになるため拒否する。
@@ -199,65 +218,38 @@ def _normalize_exports(
         for version in versions:
             source_name = source_names[str(version)]
             if source_name in used_sources_by_version[version]:
-                raise ValueError(f"Duplicate export source in v{version}: {source_name}")
+                raise ValueError(f"Duplicate entity source in v{version}: {source_name}")
             used_sources_by_version[version].add(source_name)
             node = top_level_by_version[version].get(source_name)
             if not _matches_kind(node, kind):
-                raise ValueError(f"Export {export_name} ({kind}) source {source_name} is missing or mismatched in v{version}")
+                raise ValueError(f"Entity {entity_key} ({kind}) source {source_name} is missing or mismatched in v{version}")
         out[spec["entity_name"]] = spec
     return out
 
 
-def _iter_export_specs(explicit_exports: dict | list, versions: list[int]) -> list[tuple[str, dict]]:
-    if isinstance(explicit_exports, dict):
-        return list(explicit_exports.items())
-    if isinstance(explicit_exports, list):
-        out: list[tuple[str, dict]] = []
-        for raw_spec in explicit_exports:
-            if not isinstance(raw_spec, dict):
-                raise ValueError("Module exports array items must be objects")
-            spec = copy.deepcopy(raw_spec)
-            # array 形式では key 省略を許し、版ごとの source name から semantic key を作る。
-            export_name = spec.pop("key", None)
-            if export_name is None:
-                export_name = _default_export_key(spec, versions)
-            if not isinstance(export_name, str) or not export_name:
-                raise ValueError("Export key must be a non-empty string")
-            out.append((export_name, spec))
-        return out
-    raise ValueError("Module exports must be an object or an array")
-
-
-def _default_export_key(spec: dict, versions: list[int]) -> str:
-    raw_versions = spec.get("versions")
-    if not isinstance(raw_versions, dict):
-        raise ValueError("Array export without key must define versions")
+def _default_entity_key(source_names: dict[str, str], versions: list[int]) -> str:
     parts: list[str] = []
     for version in versions:
-        source_name = raw_versions.get(str(version))
-        if not isinstance(source_name, str) or not source_name:
-            raise ValueError(f"Export source name for v{version} must be a non-empty string")
+        source_name = source_names[str(version)]
         parts.append(source_name[:1].upper() + source_name[1:].lower())
     return "".join(parts)
 
 
-def _normalize_export_versions(export_name: str, spec: dict, versions: list[int]) -> dict[str, str]:
-    raw_versions = spec.get("versions")
-    if raw_versions is None:
-        raw_versions = {}
-    if not isinstance(raw_versions, dict):
-        raise ValueError(f"Export versions for {export_name} must be an object")
+def _normalize_source_names(spec: dict, versions: list[int]) -> dict[str, str]:
+    raw_source_names = spec.get("source_names")
+    if not isinstance(raw_source_names, dict):
+        raise ValueError("Entity source_names must be an object")
 
     source_names: dict[str, str] = {}
     for version in versions:
-        source_name = raw_versions.get(str(version), export_name)
+        source_name = raw_source_names.get(str(version))
         if not isinstance(source_name, str) or not source_name:
-            raise ValueError(f"Export source name for {export_name} v{version} must be a non-empty string")
+            raise ValueError(f"Entity source name for v{version} must be a non-empty string")
         source_names[str(version)] = source_name
     return source_names
 
 
-def _build_alias_names(export_name: str, source_names: dict[str, str]) -> list[str]:
+def _build_alias_names(source_names: dict[str, str]) -> list[str]:
     aliases: list[str] = []
     for name in source_names.values():
         if name not in aliases:
@@ -289,7 +281,7 @@ def _mapped_output_names(exports: dict, latest_version: int) -> set[str]:
         names.add(entity_name)
         names.update(spec.get("aliases", []))
         # latest 側の source 定義を通常定義として再コピーすると alias と重複するため除外する。
-        source_name = spec.get("versions", {}).get(str(latest_version))
+        source_name = spec.get("source_names", {}).get(str(latest_version))
         if source_name:
             names.add(source_name)
     return names

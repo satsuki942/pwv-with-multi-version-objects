@@ -41,11 +41,18 @@ class Example:
 MODULES_JSON_TEMPLATE = """{
   "modules": {
     "example": {
-      "exports": {
-        "Example": {
-          "kind": "class"
+      "module_path": "example",
+      "versions": [1, 2],
+      "entity_mappings": [
+        {
+          "entity_key": "Example",
+          "kind": "class",
+          "source_names": {
+            "1": "Example",
+            "2": "Example"
+          }
         }
-      }
+      ]
     }
   }
 }

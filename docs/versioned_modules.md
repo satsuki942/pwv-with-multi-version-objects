@@ -1,85 +1,80 @@
 # 複数版モジュール仕様
 
-この機能は、`foo__1__.py` と `foo__2__.py` のようなファイルを同じ論理モジュール `foo.py` の別バージョンとして扱い、単一の出力モジュールへ統合する。
+この機能は、`modules.json` に宣言された `foo__1__.py` と `foo__2__.py` のようなファイルを、同じ論理モジュール `foo.py` の別バージョンとして扱い、単一の出力モジュールへ統合する。
 
 ## 入力ファイル規約
 
-- `module_name__1__.py`: version 1 のモジュール定義
-- `module_name__2__.py`: version 2 のモジュール定義
-- 出力は `module_name.py`
-- version は整数
-- 1版以上を対象にする。1版だけの場合も、複数版対応済みの公開要素を持つモジュールとして出力される
-- 通常ファイルはそのままコピーされる。通常ファイル内のクラス名は、versioned module の判定には使わない
-- 通常ファイルから版付きモジュールを参照するときは、`foo__1__` / `foo__2__` ではなく、統合後の論理モジュール名 `foo` を import する
-- `_mv_mapping/` はコンパイル用メタデータの専用ディレクトリであり、出力対象の通常ソースにはしない
+- `_mv_mapping/modules.json` に宣言された module だけを versioned module として扱う。
+- `module_path: "models/location"` と `versions: [1, 2]` は、`models/location__1__.py` と `models/location__2__.py` を入力にして `models/location.py` を出力する。
+- `__<version>__` というファイル名は、宣言された場合だけ versioned module の一部になる。未宣言の `foo__1__.py` は通常モジュール `foo__1__` として扱う。
+- 通常ファイルはそのままコピーされる。通常ファイルから版付きモジュールを参照するときは、統合後の論理モジュール名を import する。
+- `_mv_mapping/` はコンパイル用メタデータの専用ディレクトリであり、出力対象の通常ソースにはしない。
 
 ## mapping JSON
 
-`_mv_mapping/modules.json` に `modules` キーを置き、各 versioned module の公開要素の対応関係を宣言する。versioned module に対応する mapping がない場合はコンパイルエラーになる。
+`modules` は object で、key は設定上の論理識別子である。実ファイルの場所と出力先は `module_path` で決める。
 
 ```json
 {
   "modules": {
     "foo": {
+      "module_path": "foo",
+      "versions": [1, 2],
       "imports": {
-        "1": [
-          "import os",
-          "from math import sqrt"
-        ],
-        "2": [
-          "from decimal import Decimal"
-        ]
+        "1": ["import os", "from math import sqrt"],
+        "2": ["from decimal import Decimal"]
       },
-      "exports": {
-        "Point": {
-          "kind": "class"
-        },
-        "make_label": {
-          "kind": "function"
-        },
-        "THRESHOLD": {
-          "kind": "variable",
-          "binding": "versioned_value"
-        }
-      }
-    }
-  }
-}
-```
-
-`exports` は従来の object 形式に加えて、異名要素を扱うための array 形式も受け付ける。
-
-object 形式では export key が semantic key になる。`versions` を指定すると、版ごとに異なる source name を同じ key に対応付けられる。
-
-```json
-{
-  "modules": {
-    "sample": {
-      "exports": {
-        "Point": {
+      "entity_mappings": [
+        {
+          "entity_key": "Point",
           "kind": "class",
-          "versions": {
-            "1": "Dot",
+          "source_names": {
+            "1": "Point",
             "2": "Point"
           }
+        },
+        {
+          "entity_key": "make_label",
+          "kind": "function",
+          "source_names": {
+            "1": "make_label",
+            "2": "make_label"
+          }
+        },
+        {
+          "entity_key": "threshold",
+          "kind": "variable",
+          "versioned_by": "generated",
+          "source_names": {
+            "1": "THRESHOLD",
+            "2": "LIMIT"
+          }
         }
-      }
+      ]
     }
   }
 }
 ```
 
-array 形式では `key` を省略できる。`key` がない場合は、version 昇順の source name を、各名前の先頭だけ大文字・残り小文字にして連結したものを key にする。例えば v1 `Dot`、v2 `Point` は `DotPoint` になる。
+`versions` は number array で必須であり、存在する version の正とする。宣言された version の source file が欠ける場合はコンパイルエラーになる。
+
+`entity_mappings` は、版間で同一 semantic entity とみなす top-level class / function / variable の対応関係を宣言する。`kind` は `class`, `function`, `variable` のいずれかである。
+
+`entity_key` は任意だが、指定する場合は module 内で一意でなければならない。これは public name ではなく、sync module / incompatibility lookup と内部 entity 識別に使う。省略時は `source_names` から自動導出する。
+
+`source_names` は、module の `versions` 全件分を持つ object である。全 version で同じ名前なら rename なし、異なる名前なら same-kind rename として扱う。
 
 ```json
 {
   "modules": {
     "sample": {
-      "exports": [
+      "module_path": "sample",
+      "versions": [1, 2],
+      "entity_mappings": [
         {
-          "kind": "variable",
-          "binding": "versioned_value",
-          "versions": {
+          "entity_key": "position",
+          "kind": "class",
+          "source_names": {
             "1": "Dot",
             "2": "Point"
           }
@@ -90,39 +85,24 @@ array 形式では `key` を省略できる。`key` がない場合は、version
 }
 ```
 
-異名 mapping は同種要素だけを対象にする。生成コードでは `_<key>_Entity` という隠し実体を作り、各 source name をその実体への alias として公開する。key は sync 探索と隠し実体名のための名前であり、それ自体は公開 alias にしない。上の例では概念的に次のような形になる。
+異名 mapping は同種要素だけを対象にする。生成コードでは entity 本体を作り、各 source name をその entity への alias として公開する。異 kind 要素同士の対応付けと、rename によって別 entity の公開名が衝突するケースは未対応である。
 
-```python
-_DotPoint_Entity = VersionedValue(...)
-Dot = _DotPoint_Entity
-Point = _DotPoint_Entity
-```
-
-そのため、旧名から値を更新した後に新名から参照しても同じ実体の状態が見える。`__name__` などの反射的な名前は共有実体に属するため、alias ごとに異なる値になることは保証しない。
-
-異 kind 要素同士の対応付けと、rename によって別 entity の公開名が衝突するケースは未対応である。versioned module ごとに mapping が必要である。
-
-`imports` は各 version が必要とする import 文の移行仕様である。コンパイラは versioned module のASTから import 文を収集せず、`modules.json` に書かれた import 文だけを出力する。`imports` がない module、または version key がない version は import なしとして扱う。
-
-出力される import 文は version 昇順、各 version 内の配列順で並ぶ。同じ import 文は1回だけ出力する。各文字列は単一の `import` または `from ... import ...` 文でなければならない。
+`imports` は各 version が必要とする import 文の移行仕様である。コンパイラは versioned module のASTから import 文を収集せず、`modules.json` に書かれた import 文だけを出力する。出力される import 文は version 昇順、各 version 内の配列順で並び、同じ import 文は1回だけ出力する。
 
 ## top-level 関数
 
-top-level 関数 export は、公開関数ごとに現在 version を保持する。現在 version は生成された関数オブジェクトの `_mvo_current_version` 属性に保存されるため、同じモジュール内の複数関数は互いに独立して version を持つ。初期 version は strategy にかかわらず latest version である。
+top-level 関数 entity は、公開関数ごとに現在 version を保持する。現在 version は生成された関数オブジェクトの `_mvo_current_version` 属性に保存されるため、同じモジュール内の複数関数は互いに独立して version を持つ。初期 version は strategy にかかわらず latest version である。
 
 呼び出し時はまず現在 version の関数実装が引数に対して呼び出し可能かを検査し、可能ならその version を呼ぶ。呼び出し不可の場合は version 降順で呼び出し可能な実装を探し、見つかった version をその関数の現在 version として保存してから呼ぶ。
 
 ## top-level 変数
 
-top-level 変数は値を作る構文ではなく名前束縛なので、デフォルトでは複数版対応しない。版間で意味が異なる変数だけ、ライブラリ開発者が明示的に `binding` を指定する。
+variable entity は `versioned_by` を必須とする。
 
-- `plain`: latest 側の値をそのまま公開する
-- `versioned_value`: `VersionedValue` proxy で包み、演算や属性アクセスをその変数オブジェクト自身が選ぶ現在版の値へ委譲する
-- `versioned_reference`: すでにMVO wrapperなど版管理を持つ値への参照として扱い、二重には包まない
+- `generated`: compiler が `VersionedValue` proxy を生成し、各 version の代入右辺を保持する。
+- `referenced`: 参照先がすでに versioned な値だとみなし、`VersionedValue` では包まない。latest 側の右辺を代表束縛にし、rename がある場合は各 source name を alias にする。
 
-`VersionedValue` は `get()`, `set(new_value)` を持つ。値を読むたびに、その値がどこから参照されたかではなく、対象 `VersionedValue` オブジェクト自身の現在 version に従って実体値を決定する。初期 version は latest version である。関数やメソッドの実装 version は、そこで参照される `VersionedValue` の version を固定しない。加えて、基本的な演算・属性アクセス・添字アクセスは内部の現在版の値へ委譲する。ただし、`type(X) is int` のような完全な型透過性は保証しない。
-
-`versioned_value` として公開した名前は、`X = ...` のように再束縛されないことを前提とする。値を差し替える必要がある場合は `X.set(new_value)` を使う。コンパイル対象モジュール内の `global X; X = ...` や、コンパイル外コードからの `X = ...` は現在追跡しない。
+`VersionedValue` は `get()`, `set(new_value)` を持つ。値を読むたびに、対象 `VersionedValue` オブジェクト自身の現在 version に従って実体値を決定する。初期 version は latest version である。
 
 ## 関数・メソッド dispatch
 
@@ -130,6 +110,6 @@ top-level 変数は値を作る構文ではなく名前束縛なので、デフ�
 
 ## 未対応範囲
 
-現在の主な未対応範囲は、異名 export mapping、種類が異なる要素同士の mapping、変数再束縛の検出・診断、クラス構文の拡張、複雑な状態同期、import 取り扱いの改善である。
+現在の主な未対応範囲は、異 kind 要素同士の mapping、変数再束縛の検出・診断、クラス構文の拡張、複雑な状態同期、import 取り扱いの改善である。
 
 実装ロードマップは [未対応範囲ロードマップ](roadmap.md) を参照する。

@@ -1,14 +1,29 @@
 {
   "modules": {
     "sample": {
-      "exports": {
-        "left": {
-          "kind": "function"
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "left",
+          "kind": "function",
+          "source_names": {
+            "1": "left",
+            "2": "left"
+          }
         },
-        "right": {
-          "kind": "function"
+        {
+          "entity_key": "right",
+          "kind": "function",
+          "source_names": {
+            "1": "right",
+            "2": "right"
+          }
         }
-      }
+      ]
     }
   }
 }

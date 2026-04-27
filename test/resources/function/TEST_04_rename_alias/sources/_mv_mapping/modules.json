@@ -1,10 +1,15 @@
 {
   "modules": {
     "sample": {
-      "exports": [
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
         {
           "kind": "function",
-          "versions": {
+          "source_names": {
             "1": "old_name",
             "2": "new_name"
           }

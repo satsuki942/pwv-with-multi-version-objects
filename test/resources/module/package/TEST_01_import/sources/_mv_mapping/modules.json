@@ -1,11 +1,19 @@
 {
   "modules": {
     "models/point": {
-      "exports": {
-        "Point": {
-          "kind": "class"
+      "module_path": "models/point",
+      "versions": [
+        1
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "Point",
+          "kind": "class",
+          "source_names": {
+            "1": "Point"
+          }
         }
-      }
+      ]
     }
   }
 }

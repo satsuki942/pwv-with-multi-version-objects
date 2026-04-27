@@ -1,22 +1,38 @@
 {
   "modules": {
     "sample": {
-      "exports": {
-        "THRESHOLD": {
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "THRESHOLD",
           "kind": "variable",
-          "binding": "versioned_value",
-          "versions": {
+          "versioned_by": "generated",
+          "source_names": {
             "1": "THRESHOLD",
             "2": "THRESHOLD"
           }
         },
-        "Point": {
-          "kind": "class"
+        {
+          "entity_key": "Point",
+          "kind": "class",
+          "source_names": {
+            "1": "Point",
+            "2": "Point"
+          }
         },
-        "label": {
-          "kind": "function"
+        {
+          "entity_key": "label",
+          "kind": "function",
+          "source_names": {
+            "1": "label",
+            "2": "label"
+          }
         }
-      }
+      ]
     }
   }
 }

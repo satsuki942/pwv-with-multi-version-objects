@@ -1,11 +1,16 @@
 {
   "modules": {
     "sample": {
-      "exports": [
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
         {
           "kind": "variable",
-          "binding": "versioned_value",
-          "versions": {
+          "versioned_by": "generated",
+          "source_names": {
             "1": "Dot",
             "2": "Point"
           }

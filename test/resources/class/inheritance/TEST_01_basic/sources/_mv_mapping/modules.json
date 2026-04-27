@@ -1,15 +1,29 @@
 {
   "modules": {
     "car": {
+      "module_path": "car",
+      "versions": [
+        1,
+        2
+      ],
       "imports": {
-        "1": ["from vehicle import Vehicle"],
-        "2": ["from vehicle import Vehicle"]
+        "1": [
+          "from vehicle import Vehicle"
+        ],
+        "2": [
+          "from vehicle import Vehicle"
+        ]
       },
-      "exports": {
-        "Car": {
-          "kind": "class"
+      "entity_mappings": [
+        {
+          "entity_key": "Car",
+          "kind": "class",
+          "source_names": {
+            "1": "Car",
+            "2": "Car"
+          }
         }
-      }
+      ]
     }
   }
 }

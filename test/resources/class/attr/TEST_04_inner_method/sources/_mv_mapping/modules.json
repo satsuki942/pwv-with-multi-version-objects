@@ -1,11 +1,19 @@
 {
   "modules": {
     "a": {
-      "exports": {
-        "A": {
-          "kind": "class"
+      "module_path": "a",
+      "versions": [
+        1
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "A",
+          "kind": "class",
+          "source_names": {
+            "1": "A"
+          }
         }
-      }
+      ]
     }
   }
 }

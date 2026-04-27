@@ -80,14 +80,15 @@ python main.py test/resources/module/TEST_01_basic/sources --strategy latest
 compile() に渡すディレクトリ配下を再帰的にスキャンします。
 - **/*.py はソースファイル
 - `_mv_mapping/` はコンパイル用メタデータの専用ディレクトリ
-- `_mv_mapping/modules.json` は複数版モジュール内の公開要素 mapping
+- `_mv_mapping/modules.json` は複数版モジュールと entity mapping の宣言
 - `_mv_mapping/**/*_sync.py` は同期モジュール
 - `_mv_mapping/**/*.json` は `modules.json` を除き互換性(属性)定義
 
 ### 2. 複数版モジュール
 
-- `foo__1__.py` と `foo__2__.py` は、同じ論理モジュール `foo.py` の別バージョンとして統合されます。
+- `modules.json` に宣言された `foo__1__.py` と `foo__2__.py` は、同じ論理モジュール `foo.py` の別バージョンとして統合されます。
 - version は整数です。1版だけの `foo__1__.py` も、現在のコンパイル単位として扱えます。
+- 宣言されていない `foo__1__.py` は versioned module ではなく、通常モジュール `foo__1__` として扱われます。
 - 通常ファイルはそのままコピーされます。通常ファイル内のクラス名は、versioned module の判定には使いません。
 - 通常ファイルから複数版モジュールを参照するときは、`foo__1__` / `foo__2__` ではなく、統合後の論理モジュール名 `foo` を import します。
 - mapping に書かれた公開要素だけを複数版対応としてコンパイルします。
@@ -150,36 +151,45 @@ def _sync_from_v1_to_v2(wrapper_obj):
 
 ### 7. module mapping JSON
 
-`_mv_mapping/modules.json` に `modules` キーを置くと、複数版モジュール内の公開要素の対応関係として扱います。
+`_mv_mapping/modules.json` に `modules` キーを置き、複数版モジュールの場所、存在 version、entity の対応関係を宣言します。`modules` の key は設定上の論理識別子で、実ファイルの場所と出力先は `module_path` で決まります。
 
 ```json
 {
   "modules": {
     "point": {
-      "exports": {
-        "Point": {
-          "kind": "class"
+      "module_path": "point",
+      "versions": [1, 2],
+      "entity_mappings": [
+        {
+          "entity_key": "Point",
+          "kind": "class",
+          "source_names": {
+            "1": "Point",
+            "2": "Point"
+          }
         }
-      }
+      ]
     }
   }
 }
 ```
 
-同名・同種要素に加えて、異名・同種要素も mapping できます。versioned module ごとに mapping が必要で、対応する mapping がない場合はコンパイルエラーになります。
-版間で意味が異なる変数だけ、mapping JSONで `versioned_value` または `versioned_reference` として明示してください。
+`module_path: "models/location"` と `versions: [1, 2]` は、`models/location__1__.py` と `models/location__2__.py` を入力にして `models/location.py` を出力します。宣言された version の source file がない場合はコンパイルエラーになります。
 
-異名 mapping では、`versions` に版ごとの source name を指定します。`exports` は従来の object 形式に加え、key 省略用の array 形式も使えます。
+同名・同種要素に加えて、異名・同種要素も mapping できます。異名 mapping では、`source_names` に版ごとの source name を指定します。
 
 ```json
 {
   "modules": {
     "sample": {
-      "exports": [
+      "module_path": "sample",
+      "versions": [1, 2],
+      "entity_mappings": [
         {
+          "entity_key": "position",
           "kind": "variable",
-          "binding": "versioned_value",
-          "versions": {
+          "versioned_by": "generated",
+          "source_names": {
             "1": "Dot",
             "2": "Point"
           }
@@ -190,13 +200,15 @@ def _sync_from_v1_to_v2(wrapper_obj):
 }
 ```
 
-array 形式で `key` がない場合、version 昇順の source name を、各名前の先頭だけ大文字・残り小文字にして連結します。上の例では key は `DotPoint` です。生成コードでは `_<key>_Entity` という隠し実体を作り、旧名・新名を同じ実体への alias として公開します。key 自体は sync 探索と隠し実体名のための名前であり、公開 alias にはしません。
+`entity_key` は public name ではなく、sync 探索と内部識別に使う名前です。省略した場合は `source_names` から自動導出されます。生成コードでは実体を作り、旧名・新名を同じ実体への alias として公開します。
 
 ```python
-_DotPoint_Entity = VersionedValue(...)
-Dot = _DotPoint_Entity
-Point = _DotPoint_Entity
+_position_Entity = VersionedValue(...)
+Dot = _position_Entity
+Point = _position_Entity
 ```
+
+変数 entity には `versioned_by` が必要です。`generated` は compiler が `VersionedValue` を生成し、`referenced` は参照先がすでに versioned な値だとみなして二重に包みません。
 
 異 kind 要素の対応付けや、rename によって別 entity の公開名が衝突するケースは未対応です。
 

@@ -11,7 +11,7 @@ from .common.util.constants import (
     PROJECT_VERSIONED_MODULES_KEY,
     PROJECT_MODULE_MAPPINGS_KEY,
 )
-from .versioning import parse_sync_module_filename, parse_versioned_module_filename
+from .versioning import parse_sync_module_filename
 
 def create_project_structure(input_dir: Path) -> Dict:
     """
@@ -29,22 +29,28 @@ def create_project_structure(input_dir: Path) -> Dict:
 
     mapping_dir = input_dir / "_mv_mapping"
 
-    py_files = [
-        path for path in input_dir.glob("**/*.py")
-        if not _is_relative_to(path, mapping_dir)
-    ]
-    source_files = []
-    for file_path in py_files:
-        if parse_versioned_module_filename(file_path.name)[0] is not None:
-            _register_versioned_module(input_dir, file_path, project_structure)
-        else:
-            source_files.append(file_path)
     sync_files = list(mapping_dir.glob("**/*_sync.py")) if mapping_dir.exists() else []
     mapping_file = mapping_dir / "modules.json"
     incompatibilities_files = [
         path for path in mapping_dir.glob("**/*.json")
         if path.name != "modules.json"
     ] if mapping_dir.exists() else []
+
+    declared_versioned_files: set[Path] = set()
+    if mapping_file.exists():
+        module_mappings = _load_module_mappings(mapping_file)
+        for module_mapping in module_mappings.values():
+            _register_declared_versioned_module(input_dir, module_mapping, project_structure, declared_versioned_files)
+
+    py_files = [
+        path for path in input_dir.glob("**/*.py")
+        if not _is_relative_to(path, mapping_dir)
+    ]
+    # modules.json に宣言されていない __<version>__ ファイルは通常モジュール名として扱う。
+    source_files = [
+        path for path in py_files
+        if path.resolve() not in declared_versioned_files
+    ]
 
     
     # --- 通常ファイル ---
@@ -68,17 +74,6 @@ def create_project_structure(input_dir: Path) -> Dict:
             project_structure[PROJECT_SYNC_MODULES_KEY][base_name] = _parse_sync_modules(base_name, source_code)
         except Exception as e:
             logger.error_log(f"Failed to parse {state_transformation_file}: {e}")
-
-    # --- module mapping ---
-    if mapping_file.exists():
-        try:
-            json_data = json.loads(mapping_file.read_text(encoding="utf-8"))
-            if isinstance(json_data, dict) and isinstance(json_data.get("modules"), dict):
-                project_structure[PROJECT_MODULE_MAPPINGS_KEY].update(json_data["modules"])
-            else:
-                logger.error_log(f"Invalid module mapping schema: {mapping_file}")
-        except Exception as e:
-            logger.error_log(f"Failed to parse {mapping_file}: {e}")
 
     # --- 互換性定義ファイル ---
     for incompatibilities_file in incompatibilities_files:
@@ -116,23 +111,75 @@ def _parse_sync_modules(base_name: str, source_code: str) -> Tuple:
             functions.append(node)
     return (modules, functions)
 
-def _register_versioned_module(input_dir: Path, file_path: Path, project_structure: Dict) -> None:
-    """foo__1__.py を論理モジュール foo.py のversion 1として登録する。"""
-    base_name, version = parse_versioned_module_filename(file_path.name)
-    if base_name is None or version is None:
-        return
-
-    relative_path = file_path.relative_to(input_dir)
-    logical_rel_path = relative_path.with_name(f"{base_name}.py")
-
+def _load_module_mappings(mapping_file: Path) -> dict[str, dict]:
     try:
-        source_code = file_path.read_text(encoding="utf-8")
-        tree = ast.parse(source_code)
+        json_data = json.loads(mapping_file.read_text(encoding="utf-8"))
     except Exception as e:
-        logger.error_log(f"Failed to parse {file_path}: {e}")
-        return
+        raise ValueError(f"Failed to parse {mapping_file}: {e}") from e
 
-    project_structure[PROJECT_VERSIONED_MODULES_KEY].setdefault(logical_rel_path, {})[version] = tree
+    if not isinstance(json_data, dict) or not isinstance(json_data.get("modules"), dict):
+        raise ValueError(f"Invalid module mapping schema: {mapping_file}")
+
+    out: dict[str, dict] = {}
+    used_module_paths: set[str] = set()
+    for module_key, module_mapping in json_data["modules"].items():
+        if not isinstance(module_key, str) or not module_key:
+            raise ValueError(f"Module key must be a non-empty string in {mapping_file}")
+        if not isinstance(module_mapping, dict):
+            raise ValueError(f"Module mapping must be an object: {module_key}")
+
+        module_path = module_mapping.get("module_path")
+        if not isinstance(module_path, str) or not module_path:
+            raise ValueError(f"Module module_path must be a non-empty string: {module_key}")
+        if module_path in used_module_paths:
+            raise ValueError(f"Duplicate module_path in modules.json: {module_path}")
+        used_module_paths.add(module_path)
+
+        versions = module_mapping.get("versions")
+        if (
+            not isinstance(versions, list)
+            or not versions
+            or not all(isinstance(version, int) and not isinstance(version, bool) for version in versions)
+        ):
+            raise ValueError(f"Module versions must be a non-empty array of integers: {module_key}")
+        if len(set(versions)) != len(versions):
+            raise ValueError(f"Duplicate module version in modules.json: {module_key}")
+
+        out[module_path] = module_mapping
+    return out
+
+
+def _register_declared_versioned_module(
+    input_dir: Path,
+    module_mapping: dict,
+    project_structure: Dict,
+    declared_versioned_files: set[Path],
+) -> None:
+    """JSON宣言を正として、対象versionのソースだけをversioned moduleに登録する。"""
+    module_path = Path(*module_mapping["module_path"].split("/"))
+    logical_rel_path = module_path.with_suffix(".py")
+    versions = sorted(module_mapping["versions"])
+    output_source_path = input_dir / logical_rel_path
+    if output_source_path.exists():
+        raise ValueError(f"Output path conflicts with a normal source file: {logical_rel_path.as_posix()}")
+
+    project_structure[PROJECT_MODULE_MAPPINGS_KEY][module_mapping["module_path"]] = module_mapping
+    for version in versions:
+        versioned_rel_path = module_path.with_name(f"{module_path.name}__{version}__.py")
+        versioned_path = input_dir / versioned_rel_path
+        if not versioned_path.exists():
+            raise ValueError(f"Declared versioned module file does not exist: {versioned_rel_path.as_posix()}")
+
+        try:
+            source_code = versioned_path.read_text(encoding="utf-8")
+            tree = ast.parse(source_code)
+        except Exception as e:
+            raise ValueError(
+                f"Failed to parse declared versioned module: {versioned_rel_path.as_posix()}: {e}"
+            ) from e
+
+        declared_versioned_files.add(versioned_path.resolve())
+        project_structure[PROJECT_VERSIONED_MODULES_KEY].setdefault(logical_rel_path, {})[version] = tree
 
 def _parse_incompatibility_data(file_path: Path, data: dict) -> Optional[Dict[str, Dict[str, Set[str]]]]:
     """

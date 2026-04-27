@@ -79,7 +79,7 @@ class VersionedValue:
 def collect_versioned_value_names(exports: dict) -> set[str]:
     return {
         name for name, spec in exports.items()
-        if spec.get("kind") == "variable" and spec.get("binding") == "versioned_value"
+        if spec.get("kind") == "variable" and spec.get("versioned_by") == "generated"
     }
 
 
@@ -95,14 +95,12 @@ def build_variable_export(
     latest_version: int,
     version_selection_strategy: str,
 ) -> ast.AST | None:
-    binding = spec.get("binding", "plain")
-    if binding == "versioned_reference":
-        binding = "plain"
-
-    if binding == "versioned_value":
+    versioned_by = spec.get("versioned_by")
+    if versioned_by == "generated":
+        # compiler側でVersionedValueを作り、各versionの右辺値をproxyに保持させる。
         values: list[ast.keyword] = []
         for version in versions:
-            source_name = spec.get("versions", {}).get(str(version), export_name)
+            source_name = spec.get("source_names", {}).get(str(version), export_name)
             value_ast = _extract_assignment_value(top_level_by_version[version].get(source_name))
             if value_ast is not None:
                 values.append(ast.keyword(arg=str(version), value=value_ast))
@@ -122,7 +120,8 @@ def build_variable_export(
             ),
         )
 
-    source_name = spec.get("versions", {}).get(str(latest_version), export_name)
+    # referencedは参照先が既にversionedである前提なので、latest側の右辺を代表束縛にする。
+    source_name = spec.get("source_names", {}).get(str(latest_version), export_name)
     node = copy.deepcopy(top_level_by_version[latest_version].get(source_name))
     if isinstance(node, ast.Assign):
         node.targets = [ast.Name(id=export_name, ctx=ast.Store())]

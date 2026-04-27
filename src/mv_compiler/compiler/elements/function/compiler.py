@@ -16,7 +16,7 @@ def build_function_export(
     impl_functions: dict[int, ast.FunctionDef] = {}
     parameter_infos_by_version: dict[int, list[ParameterInfo]] = {}
     for version in versions:
-        source_name = spec.get("versions", {}).get(str(version), export_name)
+        source_name = spec.get("source_names", {}).get(str(version), export_name)
         func_node = top_level_by_version[version].get(source_name)
         if not isinstance(func_node, ast.FunctionDef):
             logger.error_log(f"Function export not found: {export_name} v{version}")

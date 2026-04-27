@@ -8,9 +8,10 @@
       ],
       "entity_mappings": [
         {
+          "entity_key": "Point",
           "kind": "class",
           "source_names": {
-            "1": "Dot",
+            "1": "Point",
             "2": "Point"
           }
         }

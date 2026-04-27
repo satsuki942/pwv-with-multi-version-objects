@@ -1,6 +1,11 @@
 {
   "modules": {
     "sample": {
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
       "imports": {
         "1": [
           "import os",
@@ -11,11 +16,16 @@
           "from decimal import Decimal as D"
         ]
       },
-      "exports": {
-        "Point": {
-          "kind": "class"
+      "entity_mappings": [
+        {
+          "entity_key": "Point",
+          "kind": "class",
+          "source_names": {
+            "1": "Point",
+            "2": "Point"
+          }
         }
-      }
+      ]
     }
   }
 }

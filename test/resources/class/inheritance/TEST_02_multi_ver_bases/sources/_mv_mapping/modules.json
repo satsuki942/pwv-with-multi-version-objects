@@ -1,22 +1,46 @@
 {
   "modules": {
     "member": {
-      "exports": {
-        "Member": {
-          "kind": "class"
+      "module_path": "member",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "Member",
+          "kind": "class",
+          "source_names": {
+            "1": "Member",
+            "2": "Member"
+          }
         }
-      }
+      ]
     },
     "student": {
+      "module_path": "student",
+      "versions": [
+        1,
+        2
+      ],
       "imports": {
-        "1": ["from member import Member"],
-        "2": ["from member import Member"]
+        "1": [
+          "from member import Member"
+        ],
+        "2": [
+          "from member import Member"
+        ]
       },
-      "exports": {
-        "Student": {
-          "kind": "class"
+      "entity_mappings": [
+        {
+          "entity_key": "Student",
+          "kind": "class",
+          "source_names": {
+            "1": "Student",
+            "2": "Student"
+          }
         }
-      }
+      ]
     }
   }
 }

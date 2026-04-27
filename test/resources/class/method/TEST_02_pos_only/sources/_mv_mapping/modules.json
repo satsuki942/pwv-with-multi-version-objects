@@ -1,11 +1,21 @@
 {
   "modules": {
     "sample": {
-      "exports": {
-        "Runner": {
-          "kind": "class"
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "Runner",
+          "kind": "class",
+          "source_names": {
+            "1": "Runner",
+            "2": "Runner"
+          }
         }
-      }
+      ]
     }
   }
 }

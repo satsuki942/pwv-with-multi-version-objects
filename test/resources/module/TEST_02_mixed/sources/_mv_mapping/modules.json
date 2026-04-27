@@ -1,18 +1,38 @@
 {
   "modules": {
     "sample": {
-      "exports": {
-        "Point": {
-          "kind": "class"
+      "module_path": "sample",
+      "versions": [
+        1,
+        2
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "Point",
+          "kind": "class",
+          "source_names": {
+            "1": "Point",
+            "2": "Point"
+          }
         },
-        "choose": {
-          "kind": "function"
+        {
+          "entity_key": "choose",
+          "kind": "function",
+          "source_names": {
+            "1": "choose",
+            "2": "choose"
+          }
         },
-        "VALUE": {
+        {
+          "entity_key": "VALUE",
           "kind": "variable",
-          "binding": "versioned_value"
+          "versioned_by": "generated",
+          "source_names": {
+            "1": "VALUE",
+            "2": "VALUE"
+          }
         }
-      }
+      ]
     }
   }
 }

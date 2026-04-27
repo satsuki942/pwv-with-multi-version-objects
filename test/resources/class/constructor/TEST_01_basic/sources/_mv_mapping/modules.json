@@ -1,11 +1,19 @@
 {
   "modules": {
     "test": {
-      "exports": {
-        "Test": {
-          "kind": "class"
+      "module_path": "test",
+      "versions": [
+        1
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "Test",
+          "kind": "class",
+          "source_names": {
+            "1": "Test"
+          }
         }
-      }
+      ]
     }
   }
 }

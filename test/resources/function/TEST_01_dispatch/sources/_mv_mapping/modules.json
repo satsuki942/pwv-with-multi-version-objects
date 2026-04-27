@@ -1,11 +1,23 @@
 {
   "modules": {
     "sample": {
-      "exports": {
-        "choose": {
-          "kind": "function"
+      "module_path": "sample",
+      "versions": [
+        1,
+        2,
+        3
+      ],
+      "entity_mappings": [
+        {
+          "entity_key": "choose",
+          "kind": "function",
+          "source_names": {
+            "1": "choose",
+            "2": "choose",
+            "3": "choose"
+          }
         }
-      }
+      ]
     }
   }
 }
