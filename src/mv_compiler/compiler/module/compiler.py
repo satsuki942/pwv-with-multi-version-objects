@@ -5,12 +5,12 @@ from pathlib import Path
 from ..common.util import logger
 from ..common.util.constants import DEFAULT_VERSION_SELECTION_STRATEGY
 from ..elements.class_.compiler import build_unified_classes_for_module
-from ..elements.function.compiler import build_function_export
+from ..elements.entity import entities_of_kind, entity_source_name, entity_source_node
+from ..elements.function.compiler import build_function_entity
 from ..elements.signature import build_signature_runtime_support
 from ..elements.variable.compiler import (
     build_module_runtime,
-    build_variable_export,
-    collect_versioned_value_names,
+    build_variable_entity,
 )
 
 
@@ -22,7 +22,19 @@ def transform_versioned_module(
     incompatibilities: dict | None,
     version_selection_strategy: str = DEFAULT_VERSION_SELECTION_STRATEGY,
 ) -> tuple[Path, ast.AST | None]:
-    """版付きモジュールASTを単一モジュールASTへ統合する。"""
+    """版付きモジュールASTを単一のPythonモジュールASTへ統合する。
+
+    Args:
+        logical_rel_path: 出力先でも使う論理モジュールの相対パス。
+        versioned_trees: version番号をkeyにした、各版の入力AST。
+        module_mapping: modules.jsonで宣言された当該モジュールの設定。
+        sync_functions_dict: class entity_keyごとの状態同期関数定義。
+        incompatibilities: class entity_keyごとの非互換メソッド設定。
+        version_selection_strategy: 実行時にversionを選ぶ戦略名。
+
+    Returns:
+        論理モジュールの相対パスと、統合後のAST。入力versionが空ならASTはNone。
+    """
     versions = sorted(versioned_trees)
     if not versions:
         logger.error_log(f"Versioned module has no versions: {logical_rel_path}")
@@ -35,51 +47,42 @@ def transform_versioned_module(
         version: _collect_top_level_defs(tree)
         for version, tree in versioned_trees.items()
     }
-    inferred_entities = _normalize_entity_mappings(entity_mappings, top_level_by_version, versions)
-    versioned_value_names = collect_versioned_value_names(inferred_entities)
+    entities = _normalize_entity_mappings(entity_mappings, top_level_by_version, versions)
 
     new_body: list[ast.AST] = []
     import_nodes = _copy_declared_imports(module_mapping, versions)
-    import_nodes.extend(_copy_sync_imports(inferred_entities, sync_functions_dict))
+    import_nodes.extend(_copy_sync_imports(entities, sync_functions_dict))
     new_body.extend(_dedupe_imports(import_nodes))
 
-    class_exports = {
-        name: spec for name, spec in inferred_entities.items()
-        if spec.get("kind") == "class"
-    }
-    function_exports = {
-        name: spec for name, spec in inferred_entities.items()
-        if spec.get("kind") == "function"
-    }
-    if class_exports or function_exports:
+    class_entities = entities_of_kind(entities, "class")
+    function_entities = entities_of_kind(entities, "function")
+    if class_entities or function_entities:
         new_body.extend(build_signature_runtime_support())
     new_body.extend(build_module_runtime(version_selection_strategy, latest_version))
 
-    if class_exports:
+    if class_entities:
         new_body.extend(build_unified_classes_for_module(
-            class_exports,
+            class_entities,
             top_level_by_version,
             versions,
-            versioned_value_names,
             sync_functions_dict,
             incompatibilities,
             version_selection_strategy,
         ))
 
-    for export_name, spec in inferred_entities.items():
+    for entity_name, spec in entities.items():
         kind = spec.get("kind")
         if kind == "function":
-            new_body.extend(build_function_export(
-                export_name,
+            new_body.extend(build_function_entity(
+                entity_name,
                 spec,
                 top_level_by_version,
                 versions,
-                versioned_value_names,
                 version_selection_strategy,
             ))
         elif kind == "variable":
-            variable_node = build_variable_export(
-                export_name,
+            variable_node = build_variable_entity(
+                entity_name,
                 spec,
                 top_level_by_version,
                 versions,
@@ -89,8 +92,8 @@ def transform_versioned_module(
             if variable_node:
                 new_body.append(variable_node)
 
-    new_body.extend(_build_alias_assignments(inferred_entities))
-    new_body.extend(_copy_unmapped_latest_defs(latest_tree, _mapped_output_names(inferred_entities, latest_version)))
+    new_body.extend(_build_alias_assignments(entities))
+    new_body.extend(_copy_unmapped_latest_defs(latest_tree, _mapped_output_names(entities, latest_version)))
 
     new_module = ast.Module(body=new_body, type_ignores=[])
     ast.fix_missing_locations(new_module)
@@ -98,6 +101,7 @@ def transform_versioned_module(
 
 
 def _collect_top_level_defs(tree: ast.AST) -> dict[str, ast.AST]:
+    """クラス、関数、変数代入をトップレベル名で引ける索引にする。"""
     defs: dict[str, ast.AST] = {}
     for node in tree.body:
         if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
@@ -112,6 +116,7 @@ def _collect_top_level_defs(tree: ast.AST) -> dict[str, ast.AST]:
 
 
 def _copy_declared_imports(module_mapping: dict | None, versions: list[int]) -> list[ast.AST]:
+    """modules.jsonのimports宣言をASTノードへ変換する。"""
     imports_by_version = (module_mapping or {}).get("imports", {})
     if imports_by_version is None:
         imports_by_version = {}
@@ -129,6 +134,7 @@ def _copy_declared_imports(module_mapping: dict | None, versions: list[int]) -> 
 
 
 def _parse_import_spec(import_source: str, version: int) -> ast.AST:
+    """1行のimport宣言文字列をImport/ImportFrom ASTへ変換する。"""
     try:
         tree = ast.parse(import_source)
     except SyntaxError as e:
@@ -139,12 +145,13 @@ def _parse_import_spec(import_source: str, version: int) -> ast.AST:
     return tree.body[0]
 
 
-def _copy_sync_imports(exports: dict, sync_functions_dict: dict) -> list[ast.AST]:
+def _copy_sync_imports(entities: dict, sync_functions_dict: dict) -> list[ast.AST]:
+    """クラス同期関数が必要とするimportを、生成モジュール側へコピーする。"""
     imports: list[ast.AST] = []
-    for export_name, spec in exports.items():
+    for entity_name, spec in entities.items():
         if spec.get("kind") != "class":
             continue
-        sync_key = spec.get("sync_key", export_name)
+        sync_key = spec.get("sync_key", entity_name)
         sync_imports, _ = sync_functions_dict.get(sync_key, ([], []))
         for import_node in sync_imports:
             imports.append(copy.deepcopy(import_node))
@@ -152,6 +159,7 @@ def _copy_sync_imports(exports: dict, sync_functions_dict: dict) -> list[ast.AST
 
 
 def _dedupe_imports(import_nodes: list[ast.AST]) -> list[ast.AST]:
+    """同じimport文が複数経路から来ても、生成結果には1つだけ残す。"""
     imports: dict[str, ast.AST] = {}
     for import_node in import_nodes:
         imports.setdefault(ast.unparse(import_node), import_node)
@@ -163,6 +171,19 @@ def _normalize_entity_mappings(
     top_level_by_version: dict[int, dict[str, ast.AST]],
     versions: list[int],
 ) -> dict:
+    """entity_mappingsを検証し、生成処理向けの内部specへ正規化する。
+
+    Args:
+        entity_mappings: modules.jsonのentity_mappings配列。
+        top_level_by_version: versionごとのトップレベル定義索引。
+        versions: 当該モジュールで宣言されているversion一覧。
+
+    Returns:
+        生成時のentity名をkeyにした正規化済みspec。
+
+    Raises:
+        ValueError: kind、source_names、alias衝突など、宣言と入力ASTが矛盾する場合。
+    """
     if not isinstance(entity_mappings, list):
         raise ValueError("Module entity_mappings must be an array")
 
@@ -216,11 +237,11 @@ def _normalize_entity_mappings(
             used_public_names.add(public_name)
 
         for version in versions:
-            source_name = source_names[str(version)]
+            source_name = entity_source_name(spec["entity_name"], spec, version)
             if source_name in used_sources_by_version[version]:
                 raise ValueError(f"Duplicate entity source in v{version}: {source_name}")
             used_sources_by_version[version].add(source_name)
-            node = top_level_by_version[version].get(source_name)
+            node = entity_source_node(top_level_by_version, spec["entity_name"], spec, version)
             if not _matches_kind(node, kind):
                 raise ValueError(f"Entity {entity_key} ({kind}) source {source_name} is missing or mismatched in v{version}")
         out[spec["entity_name"]] = spec
@@ -228,6 +249,7 @@ def _normalize_entity_mappings(
 
 
 def _default_entity_key(source_names: dict[str, str], versions: list[int]) -> str:
+    """entity_key未指定時に、各versionのsource名から暫定keyを作る。"""
     parts: list[str] = []
     for version in versions:
         source_name = source_names[str(version)]
@@ -236,6 +258,7 @@ def _default_entity_key(source_names: dict[str, str], versions: list[int]) -> st
 
 
 def _normalize_source_names(spec: dict, versions: list[int]) -> dict[str, str]:
+    """source_namesが全version分そろっていることを検証して正規化する。"""
     raw_source_names = spec.get("source_names")
     if not isinstance(raw_source_names, dict):
         raise ValueError("Entity source_names must be an object")
@@ -250,6 +273,7 @@ def _normalize_source_names(spec: dict, versions: list[int]) -> dict[str, str]:
 
 
 def _build_alias_names(source_names: dict[str, str]) -> list[str]:
+    """各versionのsource名を、重複を除いた公開alias候補にする。"""
     aliases: list[str] = []
     for name in source_names.values():
         if name not in aliases:
@@ -257,14 +281,16 @@ def _build_alias_names(source_names: dict[str, str]) -> list[str]:
     return aliases
 
 
-def _uses_entity_alias(export_name: str, aliases: list[str]) -> bool:
-    return len(aliases) > 1 or aliases != [export_name]
+def _uses_entity_alias(entity_key: str, aliases: list[str]) -> bool:
+    """source名とentity_keyが一致せず、alias生成が必要か判定する。"""
+    return len(aliases) > 1 or aliases != [entity_key]
 
 
-def _build_alias_assignments(exports: dict) -> list[ast.Assign]:
+def _build_alias_assignments(entities: dict) -> list[ast.Assign]:
+    """生成したentity本体へ、旧名や異名から到達するための代入を作る。"""
     assignments: list[ast.Assign] = []
-    for entity_name, spec in exports.items():
-        # 生成した隠し実体を、各版で実際に使われていた名前から参照できるようにする。
+    for entity_name, spec in entities.items():
+        # 生成した実体を、各版で実際に使われていた名前から参照できるようにする。
         for alias in spec.get("aliases", []):
             if alias == entity_name:
                 continue
@@ -275,19 +301,19 @@ def _build_alias_assignments(exports: dict) -> list[ast.Assign]:
     return assignments
 
 
-def _mapped_output_names(exports: dict, latest_version: int) -> set[str]:
-    names: set[str] = set(exports)
-    for entity_name, spec in exports.items():
+def _mapped_output_names(entities: dict, latest_version: int) -> set[str]:
+    """通常定義として再コピーしてはいけないトップレベル名を集める。"""
+    names: set[str] = set(entities)
+    for entity_name, spec in entities.items():
         names.add(entity_name)
         names.update(spec.get("aliases", []))
         # latest 側の source 定義を通常定義として再コピーすると alias と重複するため除外する。
-        source_name = spec.get("source_names", {}).get(str(latest_version))
-        if source_name:
-            names.add(source_name)
+        names.add(entity_source_name(entity_name, spec, latest_version))
     return names
 
 
 def _matches_kind(node: ast.AST | None, kind: str) -> bool:
+    """entity_mappingsのkindと、実際のASTノード種別が一致するか判定する。"""
     if kind == "class":
         return isinstance(node, ast.ClassDef)
     if kind == "function":
@@ -298,6 +324,7 @@ def _matches_kind(node: ast.AST | None, kind: str) -> bool:
 
 
 def _copy_unmapped_latest_defs(latest_tree: ast.AST, mapped_names: set[str]) -> list[ast.AST]:
+    """entity_mappings対象外のlatest定義を、そのまま生成モジュールへ残す。"""
     out: list[ast.AST] = []
     for node in latest_tree.body:
         if isinstance(node, (ast.Import, ast.ImportFrom)):
@@ -309,6 +336,7 @@ def _copy_unmapped_latest_defs(latest_tree: ast.AST, mapped_names: set[str]) -> 
 
 
 def _top_level_name(node: ast.AST) -> str | None:
+    """トップレベル定義ノードから、その公開名を取り出す。"""
     if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
         return node.name
     if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
