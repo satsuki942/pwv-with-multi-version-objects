@@ -2,7 +2,7 @@
 # 直接実行されない。
 def __init__(self, *args, **kwargs):
 
-    self._CURRENT_STATE_PLACEHOLDER = self._VERSION_INSTANCES_SINGLETON_PLACEHOLDER[-1]
+    self._CURRENT_STATE_PLACEHOLDER = self._VERSION_INSTANCES_SINGLETON_PLACEHOLDER[max(self._VERSION_INSTANCES_SINGLETON_PLACEHOLDER)]
 
     try:
         self._CURRENT_STATE_PLACEHOLDER.__initialize__(*args, _wrapper_self=self, **kwargs)

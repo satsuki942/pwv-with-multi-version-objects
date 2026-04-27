@@ -66,7 +66,7 @@ def _build_wrapper_class(class_info) -> ast.ClassDef:
 def _build_impl_classes(class_info, class_name: str) -> list[ast.ClassDef]:
     impl_classes: list[ast.ClassDef] = []
 
-    for version_str in class_info.get_all_versions():
+    for version_str in sorted(class_info.get_all_versions(), key=int):
         # 各バージョンごとの親実装クラス一覧を作成
         impl_bases = []
         parent_list = class_info.versioned_bases.get(version_str, [])
@@ -133,16 +133,16 @@ def _build_impl_classes(class_info, class_name: str) -> list[ast.ClassDef]:
     return impl_classes
 
 def _build_singleton_instance_list_stmt(class_info) -> ast.Assign:
-    impl_class_calls = []
-    for version_str in sorted(class_info.get_all_versions()):
+    impl_class_values = []
+    impl_class_keys = []
+    for version_str in sorted(class_info.get_all_versions(), key=int):
         impl_name = get_impl_class_name(version_str)
-        impl_class_calls.append(
-            ast.Call(func=ast.Name(id=impl_name, ctx=ast.Load()), args=[], keywords=[])
-        )
+        impl_class_keys.append(ast.Constant(value=int(version_str)))
+        impl_class_values.append(ast.Call(func=ast.Name(id=impl_name, ctx=ast.Load()), args=[], keywords=[]))
 
     singleton_list_stmt = ast.Assign(
         targets=[ast.Name(id=get_version_instances_singleton_name(class_info.class_name), ctx=ast.Store())],
-        value=ast.List(elts=impl_class_calls, ctx=ast.Load())
+        value=ast.Dict(keys=impl_class_keys, values=impl_class_values)
     )
     return singleton_list_stmt
 

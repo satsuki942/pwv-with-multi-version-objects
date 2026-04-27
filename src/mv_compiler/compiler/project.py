@@ -2,6 +2,7 @@ import ast
 import shutil
 from pathlib import Path
 
+from .evolution.compiler import has_evolution_syntax, transform_evolution_module
 from .module.compiler import transform_versioned_module
 from .scanner import create_project_structure
 from .common.util import logger
@@ -50,34 +51,28 @@ def transform_project(
     project_structure: dict | None = None,
 ) -> list[tuple[Path, ast.AST | None]]:
     """
-    入力ディレクトリ内の通常ファイルとversioned moduleを変換し、ASTを返す。
+    入力ディレクトリ内の Python ファイルを evolution DSL 前提で変換し、ASTを返す。
     """
-    if project_structure is None:
-        project_structure = create_project_structure(input_dir)
-    logger.success_log(
-        f"Found {len(project_structure[PROJECT_SYNC_MODULES_KEY])} sync modules and {len(project_structure[PROJECT_NORMAL_FILES_KEY])} normal files in {input_dir}."
-    )
-    logger.success_log(f"Completed parsing and classifying files in {input_dir}.")
-
     out: list[tuple[Path, ast.AST]] = []
-    for rel_path, tree in project_structure[PROJECT_NORMAL_FILES_KEY]:
-        logger.debug_log(f"Copying normal file: {rel_path}")
-        out.append((rel_path, tree))
+    for source_file in sorted(input_dir.glob("**/*.py")):
+        if "_mv_mapping" in source_file.parts:
+            continue
+        rel_path = source_file.relative_to(input_dir)
+        source_code = source_file.read_text(encoding="utf-8-sig")
+        tree = ast.parse(source_code)
 
-    for rel_path, versioned_trees in project_structure[PROJECT_VERSIONED_MODULES_KEY].items():
-        module_key = rel_path.with_suffix("").as_posix()
-        module_mapping = project_structure[PROJECT_MODULE_MAPPINGS_KEY].get(module_key)
-        if module_mapping is None:
-            raise ValueError(f"Missing module mapping for versioned module: {module_key}")
-        _, transformed_ast = transform_versioned_module(
-            rel_path,
-            versioned_trees,
-            module_mapping,
-            project_structure[PROJECT_SYNC_MODULES_KEY],
-            project_structure[PROJECT_INCOMPATIBILITIES_KEY],
-            version_selection_strategy,
-        )
-        out.append((rel_path, transformed_ast))
+        # DSL を含むモジュールだけ新 compiler に通し、それ以外は通常 Python としてコピーする。
+        if has_evolution_syntax(tree):
+            logger.debug_log(f"Transforming evolution module: {rel_path}")
+            _, transformed_ast = transform_evolution_module(
+                rel_path,
+                tree,
+                version_selection_strategy=version_selection_strategy,
+            )
+            out.append((rel_path, transformed_ast))
+        else:
+            logger.debug_log(f"Copying normal file: {rel_path}")
+            out.append((rel_path, tree))
 
     return out
 

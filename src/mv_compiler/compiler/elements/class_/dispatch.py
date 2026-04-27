@@ -70,6 +70,7 @@ def create_slow_path_dispatcher(class_name: str, method_name: str, overloads: li
 
 
 def _build_candidate_method_lookup(class_name: str, method_name: str, version: int) -> ast.Attribute:
+    """疎なversion履歴に対応するため、実装singletonはversion番号をkeyに引く。"""
     return ast.Attribute(
         value=ast.Subscript(
             value=ast.Attribute(
@@ -77,7 +78,7 @@ def _build_candidate_method_lookup(class_name: str, method_name: str, version: i
                 attr=get_version_instances_singleton_name(class_name),
                 ctx=ast.Load(),
             ),
-            slice=ast.Constant(value=version - 1),
+            slice=ast.Constant(value=version),
             ctx=ast.Load(),
         ),
         attr=method_name,

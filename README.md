@@ -75,6 +75,11 @@ python main.py test/resources/module/TEST_01_basic/sources --strategy latest
 
 ## 入力形式
 
+このブランチでは、top-level evolution DSL を主入力形式として扱います。
+構文と基本仕様は [docs/evolution_dsl.md](docs/evolution_dsl.md) を参照してください。
+
+旧来の `_mv_mapping/modules.json` と `foo__N__.py` による入力形式は、このブランチでは互換要件にしません。
+
 ### 1. 入力ディレクトリ
 
 compile() に渡すディレクトリ配下を再帰的にスキャンします。

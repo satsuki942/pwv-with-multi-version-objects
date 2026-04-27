@@ -22,7 +22,9 @@ def pytest_generate_tests(metafunc):
     if "input_dir" in metafunc.fixturenames:
         target_path_str = metafunc.config.getoption("--target_dir")
         
-        search_root = RESOURCES_ROOT
+        # このブランチでは evolution DSL 形式を主対象にする。
+        # 旧 modules.json 形式の大量ケースは互換要件ではないため、既定では収集しない。
+        search_root = RESOURCES_ROOT / "evolution"
         if target_path_str:
             candidate = RESOURCES_ROOT / target_path_str
             if not candidate.is_dir():
