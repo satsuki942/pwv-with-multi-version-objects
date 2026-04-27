@@ -1,0 +1,11 @@
+{
+  "modules": {
+    "sample": {
+      "exports": {
+        "choose": {
+          "kind": "function"
+        }
+      }
+    }
+  }
+}

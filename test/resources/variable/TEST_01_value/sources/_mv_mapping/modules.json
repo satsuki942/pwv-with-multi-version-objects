@@ -1,0 +1,16 @@
+{
+  "modules": {
+    "sample": {
+      "exports": {
+        "LEFT": {
+          "kind": "variable",
+          "binding": "versioned_value"
+        },
+        "RIGHT": {
+          "kind": "variable",
+          "binding": "versioned_value"
+        }
+      }
+    }
+  }
+}

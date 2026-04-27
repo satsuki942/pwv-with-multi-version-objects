@@ -1,0 +1,16 @@
+{
+  "modules": {
+    "sample": {
+      "imports": {
+        "1": [
+          "x = 1"
+        ]
+      },
+      "exports": {
+        "Point": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

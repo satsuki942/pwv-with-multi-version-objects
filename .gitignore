@@ -20,6 +20,7 @@ pytestdebug.log*
 # output directories
 output/
 logs/
+compiled/
 
 # temporary files
 *.tmp

@@ -59,14 +59,14 @@ uv sync --group bench --active
 ### 手動実行
 
 ```bash
-# 例: test/resources/basic_cases/TEST_basic_01/sources を実行
-python main.py test/resources/basic_cases/TEST_basic_01/sources
+# 例: 現行の複数版モジュールケースを実行
+python main.py test/resources/module/TEST_01_basic/sources
 
 # デバッグログを有効化
-python main.py test/resources/basic_cases/TEST_basic_01/sources --debug
+python main.py test/resources/module/TEST_01_basic/sources --debug
 
 # バージョン選択戦略を指定
-python main.py test/resources/basic_cases/TEST_basic_01/sources --strategy latest
+python main.py test/resources/module/TEST_01_basic/sources --strategy latest
 ```
 
 - target_dir は main.py 内の `INPUT_BASE_PATH` からの相対パスです。
@@ -177,9 +177,16 @@ main.py 経由で実行する場合、入力ディレクトリ直下に main.py 
 
 ## テスト
 
-- テストケース: test/resources/**/TEST_*/ 以下
-- 入力サンプル: test/resources/**/TEST_*/sources/
-- 期待出力: test/resources/**/TEST_*/outputs/output.txt
+- モジュール全体の統合ケース: `test/resources/module/**/TEST_*/`
+- top-level class の統合ケース: `test/resources/class/**/TEST_*/`
+- top-level function の統合ケース: `test/resources/function/**/TEST_*/`
+- top-level variable の統合ケース: `test/resources/variable/**/TEST_*/`
+- 入力サンプル: `test/resources/**/TEST_*/sources/`
+- 期待出力: `test/resources/**/TEST_*/outputs/output.txt`
+
+最下流のテストケースディレクトリは `TEST_xx_yyy` の形式にします。`xx` はその親ディレクトリ内の2桁 index、`yyy` は短い説明です。説明が不要なら `basic` を使います。
+各 `sources/main.py` の先頭には、そのプログラムで検証したいことを日本語コメントで書きます。
+pytest 実行時は、各ケース配下の `compiled/` に最新のコンパイル結果と `metadata.json` が出力されます。
 
 ### テストの実行
 
@@ -188,7 +195,10 @@ main.py 経由で実行する場合、入力ディレクトリ直下に main.py 
 pytest
 
 # 特定のテストのみ
-pytest --target_dir=basic_cases/TEST_basic_01
+pytest --target_dir=module/TEST_01_basic
+pytest --target_dir=class/constructor/TEST_01_basic
+pytest --target_dir=function/TEST_01_dispatch
+pytest --target_dir=variable/TEST_01_value
 ```
 
 ## ディレクトリ構成
@@ -216,12 +226,10 @@ pytest --target_dir=basic_cases/TEST_basic_01
 └── test/
     ├── conftest.py
     ├── test_create.py
-    ├── test_transformer.py
+    ├── test_resource_cases.py
     └── resources/
-        ├── basic_cases/
-        │   └── TEST_basic_01/
-        │       ├── sources/
-        │       └── outputs/
-        └── features/
-            └── ...
+        ├── module/
+        ├── class/
+        ├── function/
+        └── variable/
 ```

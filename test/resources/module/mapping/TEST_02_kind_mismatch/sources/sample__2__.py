@@ -1,0 +1,2 @@
+def Point():
+    return None

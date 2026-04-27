@@ -7,6 +7,7 @@ RESOURCES_ROOT = TEST_ROOT / "resources"
 
 # File template for the test case
 MAIN_PY_TEMPLATE = """
+# このテストケースで検証したい振る舞いをここに書く。
 from example import Example
 
 
@@ -35,6 +36,19 @@ class Example:
 
     def value(self):
         return self.y * 2
+"""
+
+MODULES_JSON_TEMPLATE = """{
+  "modules": {
+    "example": {
+      "exports": {
+        "Example": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}
 """
 
 def create_test_case(test_case_path: str):
@@ -73,9 +87,13 @@ def create_test_case(test_case_path: str):
         return
 
     # --- 2. Create source and expected files ---
+    mapping_dir = input_dir / "_mv_mapping"
+    mapping_dir.mkdir(parents=True, exist_ok=True)
+
     (input_dir / "main.py").write_text(MAIN_PY_TEMPLATE, encoding="utf-8")
     (input_dir / "example__1__.py").write_text(EXAMPLE_V1_TEMPLATE, encoding="utf-8")
     (input_dir / "example__2__.py").write_text(EXAMPLE_V2_TEMPLATE, encoding="utf-8")
+    (mapping_dir / "modules.json").write_text(MODULES_JSON_TEMPLATE, encoding="utf-8")
     expected_file.touch()
 
     log("\nSuccessfully created test case structure:")
@@ -100,7 +118,7 @@ def main():
     )
     parser.add_argument(
         "test_case_path",
-        help="The relative path for the new test case (e.g., 'basic_cases/TEST_basic_01' or 'features/attr/01_basic')."
+        help="The relative path for the new test case (e.g., 'class/attr/01_basic' or 'module/01_mixed')."
     )
     args = parser.parse_args()
     

@@ -1,0 +1,15 @@
+{
+  "modules": {
+    "sample": {
+      "exports": {
+        "Point": {
+          "kind": "class",
+          "versions": {
+            "1": "Point",
+            "2": "RenamedPoint"
+          }
+        }
+      }
+    }
+  }
+}

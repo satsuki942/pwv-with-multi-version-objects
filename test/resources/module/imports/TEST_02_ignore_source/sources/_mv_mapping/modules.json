@@ -1,0 +1,17 @@
+{
+  "modules": {
+    "sample": {
+      "imports": {
+        "1": [
+          "from math import sqrt"
+        ],
+        "2": []
+      },
+      "exports": {
+        "Point": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "modules": {
+    "sample": {
+      "exports": {
+        "Point": {
+          "kind": "class"
+        },
+        "choose": {
+          "kind": "function"
+        },
+        "VALUE": {
+          "kind": "variable",
+          "binding": "versioned_value"
+        }
+      }
+    }
+  }
+}

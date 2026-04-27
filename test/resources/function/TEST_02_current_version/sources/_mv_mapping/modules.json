@@ -1,0 +1,14 @@
+{
+  "modules": {
+    "sample": {
+      "exports": {
+        "left": {
+          "kind": "function"
+        },
+        "right": {
+          "kind": "function"
+        }
+      }
+    }
+  }
+}

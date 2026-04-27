@@ -1,0 +1,21 @@
+{
+  "modules": {
+    "sample": {
+      "imports": {
+        "1": [
+          "import os",
+          "from math import sqrt"
+        ],
+        "2": [
+          "import os",
+          "from decimal import Decimal as D"
+        ]
+      },
+      "exports": {
+        "Point": {
+          "kind": "class"
+        }
+      }
+    }
+  }
+}
