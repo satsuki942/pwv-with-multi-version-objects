@@ -15,7 +15,7 @@
 
 ## mapping JSON
 
-`_mv_mapping/modules.json` に `modules` キーを置くと、版付きモジュールの公開要素の対応関係として扱う。
+`_mv_mapping/modules.json` に `modules` キーを置き、各 versioned module の公開要素の対応関係を宣言する。versioned module に対応する mapping がない場合はコンパイルエラーになる。
 
 ```json
 {
@@ -47,7 +47,7 @@
 }
 ```
 
-現時点では同名・同種要素だけを mapping できる。mapping がない要素は、他の version に同名要素があっても latest 側の定義をそのまま公開する。
+現時点では同名・同種要素だけを mapping できる。versioned module ごとに mapping が必要である。
 
 `imports` は各 version が必要とする import 文の移行仕様である。コンパイラは versioned module のASTから import 文を収集せず、`modules.json` に書かれた import 文だけを出力する。`imports` がない module、または version key がない version は import なしとして扱う。
 

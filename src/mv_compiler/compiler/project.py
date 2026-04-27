@@ -67,6 +67,8 @@ def transform_project(
     for rel_path, versioned_trees in project_structure[PROJECT_VERSIONED_MODULES_KEY].items():
         module_key = rel_path.with_suffix("").as_posix()
         module_mapping = project_structure[PROJECT_MODULE_MAPPINGS_KEY].get(module_key)
+        if module_mapping is None:
+            raise ValueError(f"Missing module mapping for versioned module: {module_key}")
         _, transformed_ast = transform_versioned_module(
             rel_path,
             versioned_trees,

@@ -166,7 +166,7 @@ def _sync_from_v1_to_v2(wrapper_obj):
 }
 ```
 
-現時点では同名・同種要素だけを mapping できます。mapping がない要素は latest 側の定義をそのまま公開します。
+現時点では同名・同種要素だけを mapping できます。versioned module ごとに mapping が必要で、対応する mapping がない場合はコンパイルエラーになります。
 版間で意味が異なる変数だけ、mapping JSONで `versioned_value` または `versioned_reference` として明示してください。
 
 ### 8. エントリポイント
