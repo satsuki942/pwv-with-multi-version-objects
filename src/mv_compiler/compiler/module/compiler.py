@@ -56,9 +56,15 @@ def transform_versioned_module(
 
     class_entities = entities_of_kind(entities, "class")
     function_entities = entities_of_kind(entities, "function")
+    variable_entities = entities_of_kind(entities, "variable")
     if class_entities or function_entities:
         new_body.extend(build_signature_runtime_support())
-    new_body.extend(build_module_runtime(version_selection_strategy, latest_version))
+    has_generated_variable = any(
+        spec.get("versioned_by") == "generated"
+        for spec in variable_entities.values()
+    )
+    if has_generated_variable:
+        new_body.extend(build_module_runtime(version_selection_strategy, latest_version))
 
     if class_entities:
         new_body.extend(build_unified_classes_for_module(
