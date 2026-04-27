@@ -1,2 +1,0 @@
-def Point():
-    return None

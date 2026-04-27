@@ -40,6 +40,6 @@ Optional per-case settings can be written in `test.json`:
 ```json
 {
   "version_selection_strategy": "latest",
-  "expect_compile_error": "Import spec"
+  "expect_compile_error": "missing or mismatched"
 }
 ```
