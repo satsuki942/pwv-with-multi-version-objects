@@ -1,0 +1,15 @@
+{
+  "modules": {
+    "sample": {
+      "exports": [
+        {
+          "kind": "function",
+          "versions": {
+            "1": "old_name",
+            "2": "new_name"
+          }
+        }
+      ]
+    }
+  }
+}

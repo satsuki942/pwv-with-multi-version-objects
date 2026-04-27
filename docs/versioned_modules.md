@@ -47,7 +47,60 @@
 }
 ```
 
-現時点では同名・同種要素だけを mapping できる。versioned module ごとに mapping が必要である。
+`exports` は従来の object 形式に加えて、異名要素を扱うための array 形式も受け付ける。
+
+object 形式では export key が semantic key になる。`versions` を指定すると、版ごとに異なる source name を同じ key に対応付けられる。
+
+```json
+{
+  "modules": {
+    "sample": {
+      "exports": {
+        "Point": {
+          "kind": "class",
+          "versions": {
+            "1": "Dot",
+            "2": "Point"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+array 形式では `key` を省略できる。`key` がない場合は、version 昇順の source name を、各名前の先頭だけ大文字・残り小文字にして連結したものを key にする。例えば v1 `Dot`、v2 `Point` は `DotPoint` になる。
+
+```json
+{
+  "modules": {
+    "sample": {
+      "exports": [
+        {
+          "kind": "variable",
+          "binding": "versioned_value",
+          "versions": {
+            "1": "Dot",
+            "2": "Point"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+異名 mapping は同種要素だけを対象にする。生成コードでは `_<key>_Entity` という隠し実体を作り、各 source name をその実体への alias として公開する。key は sync 探索と隠し実体名のための名前であり、それ自体は公開 alias にしない。上の例では概念的に次のような形になる。
+
+```python
+_DotPoint_Entity = VersionedValue(...)
+Dot = _DotPoint_Entity
+Point = _DotPoint_Entity
+```
+
+そのため、旧名から値を更新した後に新名から参照しても同じ実体の状態が見える。`__name__` などの反射的な名前は共有実体に属するため、alias ごとに異なる値になることは保証しない。
+
+異 kind 要素同士の対応付けと、rename によって別 entity の公開名が衝突するケースは未対応である。versioned module ごとに mapping が必要である。
 
 `imports` は各 version が必要とする import 文の移行仕様である。コンパイラは versioned module のASTから import 文を収集せず、`modules.json` に書かれた import 文だけを出力する。`imports` がない module、または version key がない version は import なしとして扱う。
 

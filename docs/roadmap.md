@@ -8,21 +8,21 @@
 
 ## 優先順位
 
-### 1. export mapping の拡張 [重要度: 高]
+### 1. export mapping の残課題 [重要度: 高]
 
-目的: 版ごとに名前や形が変わった公開要素を、同じ論理 API として扱えるようにする。
+目的: same-kind rename より先の、名前衝突や kind 変更を含む公開要素の進化を扱えるようにする。
 
 現状制約:
 
-- `modules.json` の export mapping は同名・同種要素だけを扱う。
-- `versions` に異なる source name を書いても、現在は `ValueError` になる。
-- `class` / `function` / `variable` など種類が異なる要素同士の対応付けはできない。
+- `modules.json` の export mapping は同名・同種要素と、衝突しない異名・同種要素を扱える。
+- rename の結果、旧名/新名が別 entity の公開名と衝突するケースは扱わない。
+- `class` / `function` / `variable` など種類が異なる要素同士の対応付けや名前衝突解決はできない。
 
 完了条件の概要:
 
-- version ごとに異なる source name を指定できる。
-- 異名 mapping の dispatch / wrapper 生成が既存の同名 mapping と同じ公開名で動作する。
-- 種類変更を許す場合は、許可する組み合わせと生成結果の意味を仕様化する。
+- 異 kind の要素が同じ公開名で衝突するとき、どの版・要素を選ぶべきかを決める方法を仕様化する。
+- 異 kind だが意味的に対応する要素について、状態同期を行う方法を仕様化する。
+- 特に異 kind 状態同期は、実際の Python ライブラリ更新事例を見て、必要とされる機能を洗い出してから実装する。
 
 ### 2. クラス対応範囲の拡張 [重要度: 高]
 

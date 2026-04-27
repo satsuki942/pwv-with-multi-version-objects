@@ -33,9 +33,10 @@ def build_unified_classes_for_module(
     SymbolTableBuilder(symbol_table).visit(synthetic_module)
 
     out: list[ast.ClassDef] = []
-    for export_name in class_exports:
-        state_sync_components = sync_functions_dict.get(export_name, ([], []))
-        incompatibility = incompatibilities.get(export_name) if incompatibilities else None
+    for export_name, spec in class_exports.items():
+        mapping_key = spec.get("key", export_name)
+        state_sync_components = sync_functions_dict.get(mapping_key, ([], []))
+        incompatibility = incompatibilities.get(mapping_key) if incompatibilities else None
         out.append(build_unified_class(
             export_name,
             state_sync_components,

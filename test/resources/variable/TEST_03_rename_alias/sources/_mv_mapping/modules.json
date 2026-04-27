@@ -1,0 +1,16 @@
+{
+  "modules": {
+    "sample": {
+      "exports": [
+        {
+          "kind": "variable",
+          "binding": "versioned_value",
+          "versions": {
+            "1": "Dot",
+            "2": "Point"
+          }
+        }
+      ]
+    }
+  }
+}

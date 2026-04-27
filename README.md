@@ -166,8 +166,39 @@ def _sync_from_v1_to_v2(wrapper_obj):
 }
 ```
 
-現時点では同名・同種要素だけを mapping できます。versioned module ごとに mapping が必要で、対応する mapping がない場合はコンパイルエラーになります。
+同名・同種要素に加えて、異名・同種要素も mapping できます。versioned module ごとに mapping が必要で、対応する mapping がない場合はコンパイルエラーになります。
 版間で意味が異なる変数だけ、mapping JSONで `versioned_value` または `versioned_reference` として明示してください。
+
+異名 mapping では、`versions` に版ごとの source name を指定します。`exports` は従来の object 形式に加え、key 省略用の array 形式も使えます。
+
+```json
+{
+  "modules": {
+    "sample": {
+      "exports": [
+        {
+          "kind": "variable",
+          "binding": "versioned_value",
+          "versions": {
+            "1": "Dot",
+            "2": "Point"
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+array 形式で `key` がない場合、version 昇順の source name を、各名前の先頭だけ大文字・残り小文字にして連結します。上の例では key は `DotPoint` です。生成コードでは `_<key>_Entity` という隠し実体を作り、旧名・新名を同じ実体への alias として公開します。key 自体は sync 探索と隠し実体名のための名前であり、公開 alias にはしません。
+
+```python
+_DotPoint_Entity = VersionedValue(...)
+Dot = _DotPoint_Entity
+Point = _DotPoint_Entity
+```
+
+異 kind 要素の対応付けや、rename によって別 entity の公開名が衝突するケースは未対応です。
 
 ### 8. エントリポイント
 
