@@ -71,7 +71,7 @@ python main.py test/resources/module/TEST_01_basic/sources --strategy latest
 
 - target_dir は main.py 内の `INPUT_BASE_PATH` からの相対パスです。
   - 現状の `INPUT_BASE_PATH` はリポジトリルート（`.`）です。
-- strategy は continuity | latest を選択します。
+- strategy は continuity | latest を選択します。どちらも初期 version は latest version です。呼び出し時は現在 version をまず試し、使えない場合は latest 側から順に呼び出し可能な version を探します。
 
 ## 入力形式
 

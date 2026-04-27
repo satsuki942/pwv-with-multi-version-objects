@@ -55,9 +55,9 @@
 
 ## top-level 関数
 
-top-level 関数 export は、公開関数ごとに現在 version を保持する。現在 version は生成された関数オブジェクトの `_mvo_current_version` 属性に保存されるため、同じモジュール内の複数関数は互いに独立して version を持つ。
+top-level 関数 export は、公開関数ごとに現在 version を保持する。現在 version は生成された関数オブジェクトの `_mvo_current_version` 属性に保存されるため、同じモジュール内の複数関数は互いに独立して version を持つ。初期 version は strategy にかかわらず latest version である。
 
-呼び出し時はまず現在 version の関数実装が引数に対して呼び出し可能かを検査し、可能ならその version を呼ぶ。呼び出し不可の場合は version 昇順で呼び出し可能な実装を探し、見つかった version をその関数の現在 version として保存してから呼ぶ。
+呼び出し時はまず現在 version の関数実装が引数に対して呼び出し可能かを検査し、可能ならその version を呼ぶ。呼び出し不可の場合は version 降順で呼び出し可能な実装を探し、見つかった version をその関数の現在 version として保存してから呼ぶ。
 
 ## top-level 変数
 
@@ -67,7 +67,7 @@ top-level 変数は値を作る構文ではなく名前束縛なので、デフ�
 - `versioned_value`: `VersionedValue` proxy で包み、演算や属性アクセスをその変数オブジェクト自身が選ぶ現在版の値へ委譲する
 - `versioned_reference`: すでにMVO wrapperなど版管理を持つ値への参照として扱い、二重には包まない
 
-`VersionedValue` は `get()`, `set(new_value)` を持つ。値を読むたびに、その値がどこから参照されたかではなく、対象 `VersionedValue` オブジェクト自身の strategy と現在 version に従って実体値を決定する。関数やメソッドの実装 version は、そこで参照される `VersionedValue` の version を固定しない。加えて、基本的な演算・属性アクセス・添字アクセスは内部の現在版の値へ委譲する。ただし、`type(X) is int` のような完全な型透過性は保証しない。
+`VersionedValue` は `get()`, `set(new_value)` を持つ。値を読むたびに、その値がどこから参照されたかではなく、対象 `VersionedValue` オブジェクト自身の現在 version に従って実体値を決定する。初期 version は latest version である。関数やメソッドの実装 version は、そこで参照される `VersionedValue` の version を固定しない。加えて、基本的な演算・属性アクセス・添字アクセスは内部の現在版の値へ委譲する。ただし、`type(X) is int` のような完全な型透過性は保証しない。
 
 `versioned_value` として公開した名前は、`X = ...` のように再束縛されないことを前提とする。値を差し替える必要がある場合は `X.set(new_value)` を使う。コンパイル対象モジュール内の `global X; X = ...` や、コンパイル外コードからの `X = ...` は現在追跡しない。
 

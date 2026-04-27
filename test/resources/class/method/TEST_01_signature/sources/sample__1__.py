@@ -1,3 +1,3 @@
 class Runner:
-    def call(self, x, /):
-        return f"pos:{x}"
+    def call(self, **kwargs):
+        return f"kwargs:{sorted(kwargs)}"

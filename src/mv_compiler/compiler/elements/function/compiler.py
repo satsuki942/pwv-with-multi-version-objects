@@ -2,7 +2,6 @@ import ast
 import copy
 
 from ...common.util import logger
-from ...common.util.constants import VERSION_SELECTION_LATEST
 from ..signature import ParameterInfo, create_parameter_infos, create_signature_bind_check_call
 
 
@@ -61,7 +60,7 @@ def build_function_export(
         body=wrapper_body,
         decorator_list=[],
     )
-    initial_version = versions[-1] if version_selection_strategy == VERSION_SELECTION_LATEST else versions[0]
+    initial_version = versions[-1]
     current_version_assign = ast.Assign(
         targets=[
             ast.Attribute(
@@ -93,7 +92,7 @@ def _build_current_version_dispatch(
 ) -> ast.If | None:
     top_if_stmt: ast.If | None = None
     current_if_stmt: ast.If | None = None
-    for version in versions:
+    for version in sorted(versions, reverse=True):
         if version not in parameter_infos_by_version:
             continue
         condition = ast.BoolOp(op=ast.And(), values=[

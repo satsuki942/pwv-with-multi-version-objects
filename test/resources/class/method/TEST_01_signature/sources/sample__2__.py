@@ -1,3 +1,3 @@
 class Runner:
-    def call(self, *items):
-        return f"var:{len(items)}"
+    def call(self, x, *, mode):
+        return f"kwonly:{x}:{mode}"

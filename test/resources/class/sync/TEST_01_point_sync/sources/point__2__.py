@@ -1,9 +1,9 @@
 class Point:
 
-    def __init__(self, r: float, theta: float):
-        self.r = r
-        self.theta = theta
-        print(f'V2 Point created at (r={self.r}, theta={self.theta})')
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y
+        print(f'V1 Point created at (x={self.x}, y={self.y})')
 
-    def get_polar(self) -> tuple:
-        return (self.r, self.theta)
+    def get_cartesian(self) -> tuple:
+        return (self.x, self.y)

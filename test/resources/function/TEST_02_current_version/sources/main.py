@@ -4,7 +4,7 @@ from sample import left, right
 
 if __name__ == "__main__":
     print(left._mvo_current_version, right._mvo_current_version)
-    print(left(1, 2))
+    print(left(1))
     print(left._mvo_current_version, right._mvo_current_version)
     print(right(3))
     print(left._mvo_current_version, right._mvo_current_version)

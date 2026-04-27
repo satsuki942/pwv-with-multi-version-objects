@@ -7,7 +7,7 @@ class VersionedValue:
     def __init__(self, values, strategy='continuity'):
         object.__setattr__(self, '_values', {int(k): v for k, v in values.items()})
         object.__setattr__(self, '_strategy', strategy)
-        current_version = max(self._values.keys()) if strategy == 'latest' else min(self._values.keys())
+        current_version = max(self._values.keys())
         object.__setattr__(self, '_current_version', current_version)
 
     def _resolve_version(self):

@@ -10,7 +10,7 @@ def create_slow_path_dispatcher(class_name: str, method_name: str, overloads: li
     """
     スローパス用の静的 if-elif 連鎖を生成する。
     """
-    sorted_overloads = sorted(overloads, key=lambda m: int(m.version))
+    sorted_overloads = sorted(overloads, key=lambda m: int(m.version), reverse=True)
 
     top_if_stmt = None
     current_if_stmt = None
