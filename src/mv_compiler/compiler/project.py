@@ -2,18 +2,9 @@ import ast
 import shutil
 from pathlib import Path
 
-from .evolution.compiler import has_evolution_syntax, transform_evolution_module
-from .module.compiler import transform_versioned_module
-from .scanner import create_project_structure
+from .versioned_source.transformer import has_versioned_source_syntax, transform_versioned_source_module
 from .common.util import logger
 from .common.util.constants import DEFAULT_VERSION_SELECTION_STRATEGY
-from .common.util.constants import (
-    PROJECT_SYNC_MODULES_KEY,
-    PROJECT_INCOMPATIBILITIES_KEY,
-    PROJECT_NORMAL_FILES_KEY,
-    PROJECT_VERSIONED_MODULES_KEY,
-    PROJECT_MODULE_MAPPINGS_KEY,
-)
 
 def compile_project(
     input_dir: Path,
@@ -48,10 +39,9 @@ def transform_project(
     input_dir: Path,
     *,
     version_selection_strategy: str = DEFAULT_VERSION_SELECTION_STRATEGY,
-    project_structure: dict | None = None,
 ) -> list[tuple[Path, ast.AST | None]]:
     """
-    入力ディレクトリ内の Python ファイルを evolution DSL 前提で変換し、ASTを返す。
+    入力ディレクトリ内の Python ファイルを versioned source DSL 前提で変換し、ASTを返す。
     """
     out: list[tuple[Path, ast.AST]] = []
     for source_file in sorted(input_dir.glob("**/*.py")):
@@ -62,9 +52,9 @@ def transform_project(
         tree = ast.parse(source_code)
 
         # DSL を含むモジュールだけ新 compiler に通し、それ以外は通常 Python としてコピーする。
-        if has_evolution_syntax(tree):
-            logger.debug_log(f"Transforming evolution module: {rel_path}")
-            _, transformed_ast = transform_evolution_module(
+        if has_versioned_source_syntax(tree):
+            logger.debug_log(f"Transforming versioned source module: {rel_path}")
+            _, transformed_ast = transform_versioned_source_module(
                 rel_path,
                 tree,
                 version_selection_strategy=version_selection_strategy,
