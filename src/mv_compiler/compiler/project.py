@@ -4,6 +4,8 @@ from pathlib import Path
 
 from .module.compiler import transform_versioned_module
 from .scanner import create_project_structure
+from .logical.builder import build_logical_module_ir
+from .logical.skeleton_backend import emit_logical_module_skeleton
 from .common.util import logger
 from .common.util.constants import DEFAULT_VERSION_SELECTION_STRATEGY
 from .common.util.constants import (
@@ -51,6 +53,9 @@ def transform_project(
 ) -> list[tuple[Path, ast.AST | None]]:
     """
     入力ディレクトリ内の通常ファイルとversioned moduleを変換し、ASTを返す。
+
+    schema_version 2 の module mapping は LogicalModuleIR 経路へ流し、
+    それ以外は既存の versioned module 変換を使う。
     """
     if project_structure is None:
         project_structure = create_project_structure(input_dir)
@@ -64,19 +69,30 @@ def transform_project(
         logger.debug_log(f"Copying normal file: {rel_path}")
         out.append((rel_path, tree))
 
+    # 宣言された versioned module ごとに、対応する schema の変換経路を選ぶ。
     for rel_path, versioned_trees in project_structure[PROJECT_VERSIONED_MODULES_KEY].items():
         module_key = rel_path.with_suffix("").as_posix()
         module_mapping = project_structure[PROJECT_MODULE_MAPPINGS_KEY].get(module_key)
         if module_mapping is None:
             raise ValueError(f"Missing module mapping for versioned module: {module_key}")
-        _, transformed_ast = transform_versioned_module(
-            rel_path,
-            versioned_trees,
-            module_mapping,
-            project_structure[PROJECT_SYNC_MODULES_KEY],
-            project_structure[PROJECT_INCOMPATIBILITIES_KEY],
-            version_selection_strategy,
-        )
+        if module_mapping.get("schema_version") == 2:
+            # 新しい経路では、入力ASTをまず論理モジュールIRとして固定する。
+            logical_module_ir = build_logical_module_ir(
+                rel_path,
+                versioned_trees,
+                module_mapping,
+            )
+            transformed_ast = emit_logical_module_skeleton(logical_module_ir)
+        else:
+            # schema_version 未指定の既存入力は、従来の変換器に委譲する。
+            _, transformed_ast = transform_versioned_module(
+                rel_path,
+                versioned_trees,
+                module_mapping,
+                project_structure[PROJECT_SYNC_MODULES_KEY],
+                project_structure[PROJECT_INCOMPATIBILITIES_KEY],
+                version_selection_strategy,
+            )
         out.append((rel_path, transformed_ast))
 
     return out

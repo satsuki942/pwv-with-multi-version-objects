@@ -1,4 +1,5 @@
 import ast
+import copy
 import json
 from pathlib import Path
 from typing import Dict, Optional, Set, Tuple
@@ -18,6 +19,8 @@ def create_project_structure(input_dir: Path) -> Dict:
     1. 入力ディレクトリからPythonファイルを読み取る
     2. 各ファイルをASTに変換する
     3. ファイルを (通常ファイル / 同期関数 / 互換性定義) に分類する
+
+    modules.json が存在する場合は、その宣言を正として versioned module を登録する。
     """
     project_structure = {
         PROJECT_SYNC_MODULES_KEY: {},
@@ -89,6 +92,7 @@ def create_project_structure(input_dir: Path) -> Dict:
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
+    """path が parent 配下にあるかを、古いPythonでも使える形で判定する。"""
     try:
         path.relative_to(parent)
         return True
@@ -101,6 +105,7 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
 # --------------------
 
 def _parse_sync_modules(base_name: str, source_code: str) -> Tuple:
+    """同期モジュールから import と同期関数のASTノードを抽出する。"""
     tree = ast.parse(source_code)
     modules = []
     functions = []
@@ -112,6 +117,11 @@ def _parse_sync_modules(base_name: str, source_code: str) -> Tuple:
     return (modules, functions)
 
 def _load_module_mappings(mapping_file: Path) -> dict[str, dict]:
+    """
+    modules.json を読み込み、各 module mapping を module_path で引ける形に正規化する。
+
+    schema_version はトップレベル宣言として扱い、各 module mapping に注入する。
+    """
     try:
         json_data = json.loads(mapping_file.read_text(encoding="utf-8"))
     except Exception as e:
@@ -122,12 +132,25 @@ def _load_module_mappings(mapping_file: Path) -> dict[str, dict]:
 
     out: dict[str, dict] = {}
     used_module_paths: set[str] = set()
+
+    # schema_version は mapping 全体にかかる指定として扱う。
+    schema_version = json_data.get("schema_version", 1)
+    if not isinstance(schema_version, int) or isinstance(schema_version, bool):
+        raise ValueError(f"schema_version must be an integer in {mapping_file}")
+
     for module_key, module_mapping in json_data["modules"].items():
+        # module_key と module mapping の基本形を検証する。
         if not isinstance(module_key, str) or not module_key:
             raise ValueError(f"Module key must be a non-empty string in {mapping_file}")
         if not isinstance(module_mapping, dict):
             raise ValueError(f"Module mapping must be an object: {module_key}")
 
+        # 後続処理が参照しやすいよう、派生情報を mapping に持たせる。
+        module_mapping = copy.deepcopy(module_mapping)
+        module_mapping["module_key"] = module_key
+        module_mapping["schema_version"] = schema_version
+
+        # 出力先になる module_path は重複できない。
         module_path = module_mapping.get("module_path")
         if not isinstance(module_path, str) or not module_path:
             raise ValueError(f"Module module_path must be a non-empty string: {module_key}")
@@ -135,6 +158,7 @@ def _load_module_mappings(mapping_file: Path) -> dict[str, dict]:
             raise ValueError(f"Duplicate module_path in modules.json: {module_path}")
         used_module_paths.add(module_path)
 
+        # versioned module として読み込む版の一覧を検証する。
         versions = module_mapping.get("versions")
         if (
             not isinstance(versions, list)
@@ -159,12 +183,15 @@ def _register_declared_versioned_module(
     module_path = Path(*module_mapping["module_path"].split("/"))
     logical_rel_path = module_path.with_suffix(".py")
     versions = sorted(module_mapping["versions"])
+
+    # 論理モジュールの出力先と通常ソースが衝突する場合は曖昧なので失敗させる。
     output_source_path = input_dir / logical_rel_path
     if output_source_path.exists():
         raise ValueError(f"Output path conflicts with a normal source file: {logical_rel_path.as_posix()}")
 
     project_structure[PROJECT_MODULE_MAPPINGS_KEY][module_mapping["module_path"]] = module_mapping
     for version in versions:
+        # 宣言された各版のファイルだけを versioned module として登録する。
         versioned_rel_path = module_path.with_name(f"{module_path.name}__{version}__.py")
         versioned_path = input_dir / versioned_rel_path
         if not versioned_path.exists():
@@ -183,6 +210,8 @@ def _register_declared_versioned_module(
 
 def _parse_incompatibility_data(file_path: Path, data: dict) -> Optional[Dict[str, Dict[str, Set[str]]]]:
     """
+    旧形式の incompatibility JSON を、既存変換器が使う辞書構造に変換する。
+
     JSONスキーマ:
       {
         "<base_name>": {

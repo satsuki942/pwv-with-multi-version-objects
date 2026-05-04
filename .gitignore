@@ -21,6 +21,7 @@ pytestdebug.log*
 output/
 logs/
 compiled/
+tmp/
 
 # temporary files
 *.tmp
