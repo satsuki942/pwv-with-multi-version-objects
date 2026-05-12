@@ -2,6 +2,7 @@ import ast
 import copy
 from pathlib import Path
 
+from ..common.imports import copy_declared_imports, dedupe_imports
 from ..common.util import logger
 from ..common.util.constants import DEFAULT_VERSION_SELECTION_STRATEGY
 from ..elements.class_.compiler import build_unified_classes_for_module
@@ -50,9 +51,9 @@ def transform_versioned_module(
     entities = _normalize_entity_mappings(entity_mappings, top_level_by_version, versions)
 
     new_body: list[ast.AST] = []
-    import_nodes = _copy_declared_imports(module_mapping, versions)
+    import_nodes = copy_declared_imports(module_mapping, versions)
     import_nodes.extend(_copy_sync_imports(entities, sync_functions_dict))
-    new_body.extend(_dedupe_imports(import_nodes))
+    new_body.extend(dedupe_imports(import_nodes))
 
     class_entities = entities_of_kind(entities, "class")
     function_entities = entities_of_kind(entities, "function")
@@ -121,36 +122,6 @@ def _collect_top_level_defs(tree: ast.AST) -> dict[str, ast.AST]:
     return defs
 
 
-def _copy_declared_imports(module_mapping: dict | None, versions: list[int]) -> list[ast.AST]:
-    """modules.jsonのimports宣言をASTノードへ変換する。"""
-    imports_by_version = (module_mapping or {}).get("imports", {})
-    if imports_by_version is None:
-        imports_by_version = {}
-    if not isinstance(imports_by_version, dict):
-        raise ValueError("Module imports must be an object")
-
-    imports: list[ast.AST] = []
-    for version in versions:
-        raw_imports = imports_by_version.get(str(version), [])
-        if not isinstance(raw_imports, list) or not all(isinstance(item, str) for item in raw_imports):
-            raise ValueError(f"Module imports for v{version} must be a list of strings")
-        for import_source in raw_imports:
-            imports.append(_parse_import_spec(import_source, version))
-    return imports
-
-
-def _parse_import_spec(import_source: str, version: int) -> ast.AST:
-    """1行のimport宣言文字列をImport/ImportFrom ASTへ変換する。"""
-    try:
-        tree = ast.parse(import_source)
-    except SyntaxError as e:
-        raise ValueError(f"Invalid import spec for v{version}: {import_source}") from e
-
-    if len(tree.body) != 1 or not isinstance(tree.body[0], (ast.Import, ast.ImportFrom)):
-        raise ValueError(f"Import spec for v{version} must contain exactly one import statement: {import_source}")
-    return tree.body[0]
-
-
 def _copy_sync_imports(entities: dict, sync_functions_dict: dict) -> list[ast.AST]:
     """クラス同期関数が必要とするimportを、生成モジュール側へコピーする。"""
     imports: list[ast.AST] = []
@@ -162,14 +133,6 @@ def _copy_sync_imports(entities: dict, sync_functions_dict: dict) -> list[ast.AS
         for import_node in sync_imports:
             imports.append(copy.deepcopy(import_node))
     return imports
-
-
-def _dedupe_imports(import_nodes: list[ast.AST]) -> list[ast.AST]:
-    """同じimport文が複数経路から来ても、生成結果には1つだけ残す。"""
-    imports: dict[str, ast.AST] = {}
-    for import_node in import_nodes:
-        imports.setdefault(ast.unparse(import_node), import_node)
-    return list(imports.values())
 
 
 def _normalize_entity_mappings(
